@@ -32,12 +32,18 @@ export const CorrelationHeatmap: React.FC<CorrelationHeatmapProps> = ({ matrixDa
         <h3 className="text-sm font-semibold tracking-wide text-slate-100 uppercase">
           Asset Correlation Heatmap
         </h3>
-        <div className="flex items-center gap-2 text-[11px] text-slate-400">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
           <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600 inline-block" /> Low / Neg (&lt;0.2)
+            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600 inline-block" /> Low / negative
+            (&lt;0.2)
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-sm bg-amber-600/80 inline-block" /> Moderate
+            <span className="w-2.5 h-2.5 rounded-sm bg-slate-700 inline-block" /> Moderate
+            (0.2–&lt;0.5)
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-sm bg-amber-600/80 inline-block" /> Elevated
+            (0.5–0.75)
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-sm bg-rose-600 inline-block" /> High (&gt;{HIGH_CORRELATION_THRESHOLD})
@@ -62,11 +68,20 @@ export const CorrelationHeatmap: React.FC<CorrelationHeatmapProps> = ({ matrixDa
         <div className="overflow-x-auto pb-2">
           <div className="inline-block min-w-full align-middle">
             <table className="border-collapse table-fixed mx-auto">
+              <caption className="sr-only">
+                Pairwise asset correlations. Values above {HIGH_CORRELATION_THRESHOLD} are highlighted.
+              </caption>
               <thead>
                 <tr>
-                  <th className="w-16 p-1 text-[11px] text-slate-400 font-medium"></th>
+                  <th scope="col" className="w-16 p-1 text-[11px] text-slate-400 font-medium">
+                    <span className="sr-only">Asset</span>
+                  </th>
                   {tickers.map((t) => (
-                    <th key={t} className="w-16 p-1 text-[11px] font-mono font-medium text-slate-300 text-center">
+                    <th
+                      key={t}
+                      scope="col"
+                      className="w-16 p-1 text-[11px] font-mono font-medium text-slate-300 text-center"
+                    >
                       {t}
                     </th>
                   ))}
@@ -75,19 +90,31 @@ export const CorrelationHeatmap: React.FC<CorrelationHeatmapProps> = ({ matrixDa
               <tbody>
                 {tickers.map((rowTicker, rIdx) => (
                   <tr key={rowTicker}>
-                    <td className="p-1 text-[11px] font-mono font-medium text-slate-300 text-right pr-2">
+                    <th
+                      scope="row"
+                      className="p-1 text-[11px] font-mono font-medium text-slate-300 text-right pr-2"
+                    >
                       {rowTicker}
-                    </td>
+                    </th>
                     {tickers.map((_, cIdx) => {
                       const val = matrix[rIdx]?.[cIdx];
-                      const hasVal = typeof val === 'number' && !Number.isNaN(val);
+                      const hasVal =
+                        typeof val === 'number' &&
+                        Number.isFinite(val) &&
+                        val >= -1 &&
+                        val <= 1;
                       return (
-                        <td key={cIdx} className="p-1">
+                        <td key={tickers[cIdx]} className="p-1">
                           <div
+                            aria-label={
+                              hasVal
+                                ? `${rowTicker} and ${tickers[cIdx]} correlation ${val.toFixed(2)}`
+                                : `${rowTicker} and ${tickers[cIdx]} correlation unavailable`
+                            }
                             title={
                               hasVal
                                 ? `${rowTicker} vs ${tickers[cIdx]}: ${val.toFixed(2)}`
-                                : `${rowTicker} vs ${tickers[cIdx]}: no data`
+                                : `${rowTicker} vs ${tickers[cIdx]}: no valid correlation data`
                             }
                             className={`w-14 h-10 flex items-center justify-center rounded text-xs font-mono font-medium transition-transform hover:scale-105 hover:ring-2 hover:ring-white/40 cursor-default ${
                               hasVal ? getHeatmapColor(val) : 'bg-slate-800 text-slate-600'
