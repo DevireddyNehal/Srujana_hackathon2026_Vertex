@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import "./dashboard.css";
+import "./market-theme.css";
+import ClickEffects from "./ClickEffects";
+import {
+  analyzeScenario,
+  runReverseStressTest,
+  simulateContagion,
+} from "../../api/client";
 import {
   calculateMetrics,
   calculateScenario,
@@ -14,16 +21,77 @@ import {
   type Portfolio,
   type Scenario,
 } from "./portfolioData";
+import type {
+  ContagionSimulationResponse,
+  ReverseStressTestResponse,
+  ScenarioRiskRequest,
+  ScenarioRiskResponse,
+} from "../../types/riskEngine";
 
 type Currency = "INR" | "USD";
-type PageName = "overview" | "allocation" | "stresslab" | "compare";
+type PageName = "overview" | "allocation" | "stresslab" | "news" | "compare" | "butterfly" | "reverse";
 
 const pages: Array<{ id: PageName; label: string; file: string; title: string; eyebrow: string }> = [
-  { id: "overview", label: "Overview", file: "index.html?page=overview", title: "Risk overview", eyebrow: "Portfolio analytics" },
+  { id: "overview", label: "Risk Summary", file: "index.html?page=overview", title: "Portfolio risk summary", eyebrow: "Portfolio analytics" },
+  { id: "butterfly", label: "Butterfly", file: "index.html?page=butterfly", title: "Butterfly contagion", eyebrow: "Causal contagion analysis" },
+  { id: "reverse", label: "Reverse Test", file: "index.html?page=reverse", title: "Reverse stress test", eyebrow: "Portfolio breaking point" },
   { id: "allocation", label: "Allocation", file: "index.html?page=allocation", title: "Allocation analysis", eyebrow: "Portfolio structure" },
   { id: "stresslab", label: "Stress Lab", file: "index.html?page=stresslab", title: "Scenario stress lab", eyebrow: "Hypothetical analysis" },
   { id: "compare", label: "Compare", file: "index.html?page=compare", title: "Strategy comparison", eyebrow: "Allocation alternatives" },
+  { id: "news", label: "News", file: "index.html?page=news", title: "Market news", eyebrow: "Market updates" },
 ];
+
+const pageGuidance: Record<PageName, { title: string; tips: [string, string] }> = {
+  overview: {
+    title: "Read the whole risk picture.",
+    tips: [
+      "Volatility and drawdown describe different kinds of portfolio movement.",
+      "Consider the time horizon and cash needs before interpreting any risk metric.",
+    ],
+  },
+  allocation: {
+    title: "Look beyond the largest holding.",
+    tips: [
+      "Different holdings can still share exposure to the same sector or asset class.",
+      "Keep allocation weights at 100% when comparing portfolio composition.",
+    ],
+  },
+  stresslab: {
+    title: "Treat scenarios as questions, not predictions.",
+    tips: [
+      "Try one hypothetical shock at a time to see which assumptions drive the result.",
+      "The illustrative model cannot capture every market interaction or future outcome.",
+    ],
+  },
+  news: {
+    title: "A dedicated space for market updates.",
+    tips: [
+      "News and information will be added to this page later.",
+      "No live headlines are shown yet.",
+    ],
+  },
+  compare: {
+    title: "Compare alternatives on equal terms.",
+    tips: [
+      "Use the same horizon and scenario assumptions when reviewing both allocations.",
+      "A smaller modeled loss is a trade-off in this example, not a guarantee of future performance.",
+    ],
+  },
+  butterfly: {
+    title: "Follow the shock through the chain.",
+    tips: [
+      "Upstream cost changes can affect sectors even when those holdings look unrelated.",
+      "Causal pathways and hedge estimates depend on the engine's assumptions.",
+    ],
+  },
+  reverse: {
+    title: "Find what would have to go wrong.",
+    tips: [
+      "Reverse stress testing solves for shocks that cross a chosen loss threshold.",
+      "Distance and fragility rankings are model estimates, not forecasts of probability.",
+    ],
+  },
+};
 
 interface SavedDashboardState {
   portfolioId: string;
@@ -36,7 +104,6 @@ interface SavedDashboardState {
   horizon: number;
   liquidityNeed: number;
   lossLimit: number;
-  darkMode: boolean;
 }
 
 function currentPage(): PageName {
@@ -79,12 +146,20 @@ function loadSavedState(): SavedDashboardState | null {
         ? Math.max(0, saved.liquidityNeed!)
         : demoLiquidityNeed(portfolio),
       lossLimit: [10, 15, 20, 30].includes(saved.lossLimit ?? -1) ? saved.lossLimit! : 15,
-      darkMode: saved.darkMode === true,
     };
   } catch (error) {
     console.error("Could not read saved Vertex dashboard settings.", error);
     window.localStorage.removeItem("aperture-risk-lab-state");
     return null;
+  }
+}
+
+function loadSessionTheme(): boolean {
+  try {
+    return window.sessionStorage.getItem("vertex-theme") !== "light";
+  } catch (error) {
+    console.error("Could not read the Vertex theme preference.", error);
+    return true;
   }
 }
 
@@ -246,19 +321,149 @@ function Header({
         </label>
         <span className="data-status"><i /> Sample data</span>
         <button type="button" className="reset-view" onClick={onReset}>Reset view</button>
-        <button
-          type="button"
-          className="theme-toggle"
-          onClick={onToggleDarkMode}
-          aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`}
-          title={`Switch to ${darkMode ? "light" : "dark"} mode`}
-          aria-pressed={darkMode}
-        >
-          <span aria-hidden="true">{darkMode ? "☀" : "☾"}</span>
-          <span>{darkMode ? "Light mode" : "Dark mode"}</span>
-        </button>
+        <details className="settings-menu">
+          <summary aria-label="Settings" title="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 8.25a3.75 3.75 0 1 0 0 7.5 3.75 3.75 0 0 0 0-7.5Z" />
+              <path d="m19.4 15 .05.04a1.7 1.7 0 0 1-2.4 2.4l-.04-.05a1.7 1.7 0 0 0-2.9 1.2v.16a1.7 1.7 0 0 1-3.4 0v-.07a1.7 1.7 0 0 0-2.9-1.2l-.05.05a1.7 1.7 0 0 1-2.4-2.4l.05-.04a1.7 1.7 0 0 0-1.2-2.9h-.16a1.7 1.7 0 0 1 0-3.4h.07a1.7 1.7 0 0 0 1.2-2.9l-.05-.05a1.7 1.7 0 0 1 2.4-2.4l.04.05a1.7 1.7 0 0 0 2.9-1.2v-.16a1.7 1.7 0 0 1 3.4 0v.07a1.7 1.7 0 0 0 2.9 1.2l.05-.05a1.7 1.7 0 0 1 2.4 2.4l-.05.04a1.7 1.7 0 0 0 1.2 2.9h.16a1.7 1.7 0 0 1 0 3.4h-.07a1.7 1.7 0 0 0-1.2 2.9Z" />
+            </svg>
+          </summary>
+          <div className="settings-popover" aria-label="Appearance settings">
+            <span>Appearance</span>
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={onToggleDarkMode}
+              aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`}
+              aria-pressed={darkMode}
+            >
+              <span aria-hidden="true">{darkMode ? "☀" : "☾"}</span>
+              <span>{darkMode ? "Light mode" : "Dark mode"}</span>
+            </button>
+          </div>
+        </details>
       </div>
     </header>
+  );
+}
+
+type MetricTone = "safe-1" | "safe-2" | "watch-1" | "watch-2" | "danger-1" | "danger-2";
+type MarketValueTone = "market-red-1" | "market-red-2" | "market-red-3" | "market-red-4";
+
+function marketValueTone(value: number): MarketValueTone {
+  const values = portfolios.map((portfolio) => portfolio.marketValue);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const progress = maximum === minimum ? 0 : (value - minimum) / (maximum - minimum);
+
+  if (progress < 0.25) return "market-red-1";
+  if (progress < 0.5) return "market-red-2";
+  if (progress < 0.75) return "market-red-3";
+  return "market-red-4";
+}
+
+function riskTone(
+  value: number,
+  thresholds: readonly [number, number, number, number, number],
+): MetricTone {
+  if (value <= thresholds[0]) return "safe-1";
+  if (value <= thresholds[1]) return "safe-2";
+  if (value <= thresholds[2]) return "watch-1";
+  if (value <= thresholds[3]) return "watch-2";
+  if (value <= thresholds[4]) return "danger-1";
+  return "danger-2";
+}
+
+function coverageTone(value: number): MetricTone {
+  if (value >= 85) return "safe-1";
+  if (value >= 70) return "safe-2";
+  if (value >= 50) return "watch-1";
+  if (value >= 30) return "watch-2";
+  if (value >= 15) return "danger-1";
+  return "danger-2";
+}
+
+function riskToneLabel(tone: MetricTone, lowerIsBetter: string, higherIsBetter: string): string {
+  if (tone === "safe-1" || tone === "safe-2") {
+    return lowerIsBetter;
+  }
+  if (tone === "watch-1" || tone === "watch-2") {
+    return "Watch";
+  }
+  return higherIsBetter;
+}
+
+function useChartInView<T extends SVGSVGElement>() {
+  const ref = useRef<T | null>(null);
+  const [isInView, setIsInView] = useState(() => typeof IntersectionObserver === "undefined");
+
+  useEffect(() => {
+    const chart = ref.current;
+    if (!chart || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsInView(entry?.isIntersecting ?? false);
+    }, { threshold: 0.2 });
+    observer.observe(chart);
+    return () => observer.disconnect();
+  }, []);
+
+  return { ref, isInView };
+}
+
+function AnimatedMetricValue({
+  value,
+  format,
+  delay = 0,
+  className = "metric-value",
+}: {
+  value: number;
+  format: (value: number) => string;
+  delay?: number;
+  className?: string;
+}) {
+  const [displayValue, setDisplayValue] = useState(0);
+  const currentValue = useRef(0);
+
+  useEffect(() => {
+    const startValue = currentValue.current;
+    const duration = 950;
+    const startedAt = performance.now() + delay;
+    let frameId = 0;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      frameId = requestAnimationFrame(() => {
+        currentValue.current = value;
+        setDisplayValue(value);
+      });
+      return () => cancelAnimationFrame(frameId);
+    }
+
+    const update = (now: number) => {
+      if (now < startedAt) {
+        frameId = requestAnimationFrame(update);
+        return;
+      }
+
+      const progress = Math.min((now - startedAt) / duration, 1);
+      const easedProgress = 1 - (1 - progress) ** 4;
+      const nextValue = startValue + (value - startValue) * easedProgress;
+      currentValue.current = nextValue;
+      setDisplayValue(progress === 1 ? value : nextValue);
+
+      if (progress < 1) {
+        frameId = requestAnimationFrame(update);
+      }
+    };
+
+    frameId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frameId);
+  }, [delay, value]);
+
+  return (
+    <div className={className} aria-label={format(value)} aria-live="off">
+      {format(displayValue)}
+    </div>
   );
 }
 
@@ -280,32 +485,50 @@ function MetricStrip({
   const vaRPct = portfolio.marketValue > 0
     ? (metrics.dailyVaR / portfolio.marketValue) * 100
     : 0;
+  const vaRTone = riskTone(vaRPct, [0.5, 1, 1.75, 2.5, 4]);
+  const volatilityTone = riskTone(metrics.annualizedVolatility, [10, 16, 22, 28, 35]);
+  const drawdownTone = riskTone(Math.abs(metrics.maxDrawdown), [2, 5, 10, 18, 30]);
+  const liquidityTone = coverageTone(metrics.liquidWeight);
+  const marketValueCardTone = marketValueTone(portfolio.marketValue);
 
   return (
     <section className="metric-strip" aria-label="Portfolio risk metrics">
-      <article className="metric-card var-card">
-        <div className="metric-label">95% one-day VaR <span className="info-dot" title="Historical loss-tail estimate from a deterministic illustrative 252-day sample. Losses can exceed VaR.">i</span></div>
-        <div className="metric-value" key={`${metrics.dailyVaR}-${currency}`}>{money(metrics.dailyVaR, currency, true)}</div>
-        <div className="metric-foot"><span className="metric-dot violet" />Potential daily loss · {formatPercent(vaRPct, 2)} of value</div>
+      <article className={`metric-card var-card metric-tone-${vaRTone}`}>
+        <div className="metric-label">
+          95% one-day VaR
+          <span className="info-dot" title="Historical loss-tail estimate from a deterministic illustrative 252-day sample. Losses can exceed VaR.">i</span>
+          <span className="metric-state">{riskToneLabel(vaRTone, "Lower", "High")}</span>
+        </div>
+        <AnimatedMetricValue value={metrics.dailyVaR} format={(value) => money(value, currency, true)} />
+        <div className="metric-foot"><span className="metric-dot accent-dot" />Potential daily loss · {formatPercent(vaRPct, 2)} of value</div>
       </article>
-      <article className="metric-card">
-        <div className="metric-label">Market value</div>
-        <div className="metric-value" key={`${portfolio.marketValue}-${currency}`}>{money(portfolio.marketValue, currency, true)}</div>
+      <article className={`metric-card metric-tone-${marketValueCardTone}`}>
+        <div className="metric-label">Market value <span className="metric-state">Portfolio</span></div>
+        <AnimatedMetricValue value={portfolio.marketValue} format={(value) => money(value, currency, true)} delay={70} />
         <div className="metric-foot">Current portfolio · {holdings.length} holdings</div>
       </article>
-      <article className="metric-card">
-        <div className="metric-label">Annualized volatility</div>
-        <div className="metric-value" key={metrics.annualizedVolatility}>{formatPercent(metrics.annualizedVolatility)}</div>
+      <article className={`metric-card metric-tone-${volatilityTone}`}>
+        <div className="metric-label">
+          Annualized volatility
+          <span className="metric-state">{riskToneLabel(volatilityTone, "Lower", "High")}</span>
+        </div>
+        <AnimatedMetricValue value={metrics.annualizedVolatility} format={(value) => formatPercent(value)} delay={140} />
         <div className="metric-foot">Daily sample · √252 annualization</div>
       </article>
-      <article className="metric-card">
-        <div className="metric-label">Max historical drawdown</div>
-        <div className="metric-value negative-value" key={metrics.maxDrawdown}>{formatPercent(metrics.maxDrawdown)}</div>
+      <article className={`metric-card metric-tone-${drawdownTone}`}>
+        <div className="metric-label">
+          Max historical drawdown
+          <span className="metric-state">{riskToneLabel(drawdownTone, "Shallow", "Severe")}</span>
+        </div>
+        <AnimatedMetricValue value={metrics.maxDrawdown} format={(value) => formatPercent(value)} delay={210} className="metric-value negative-value" />
         <div className="metric-foot">Peak-to-trough · trailing {period} months</div>
       </article>
-      <article className="metric-card">
-        <div className="metric-label">Liquid asset coverage</div>
-        <div className="metric-value" key={metrics.liquidWeight}>{formatPercent(metrics.liquidWeight)}</div>
+      <article className={`metric-card metric-tone-${liquidityTone}`}>
+        <div className="metric-label">
+          Liquid asset coverage
+          <span className="metric-state">{riskToneLabel(liquidityTone, "Strong", "Low")}</span>
+        </div>
+        <AnimatedMetricValue value={metrics.liquidWeight} format={(value) => formatPercent(value)} delay={280} />
         <div className="metric-foot">{money(metrics.liquidValue, currency, true)} classified high liquidity</div>
       </article>
       {Math.abs(allocationTotal - 100) >= 0.01 && (
@@ -444,9 +667,12 @@ function PerformancePanel({
   scenario: Scenario | null;
   scenarioResult: ReturnType<typeof calculateScenario> | null;
 }) {
+  const { ref: chartRef, isInView: chartIsInView } = useChartInView<SVGSVGElement>();
+  const { ref: drawdownRef, isInView: drawdownIsInView } = useChartInView<SVGSVGElement>();
   const metrics = calculateMetrics(portfolio, weights, period);
   const values = metrics.historicalValues;
   const displayValues = values.slice(-period - 1);
+  const historyIsPositive = (displayValues.at(-1) ?? 0) >= (displayValues[0] ?? 0);
   const width = 720;
   const height = 246;
   const historyWidth = scenarioResult ? width * 0.78 : width;
@@ -503,12 +729,12 @@ function PerformancePanel({
           {yTicks.map((tick) => <span key={tick}>{money(tick, currency, true)}</span>)}
         </div>
         <svg
-          key={`${historyPath}-${scenarioPath}`}
-          className="main-chart-svg"
+          ref={chartRef}
+          className={`main-chart-svg${chartIsInView ? " chart-visible" : ""}`}
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label={`${period} month illustrative historical portfolio value chart${scenario ? " with a hypothetical scenario path" : ""}`}
-          preserveAspectRatio="none"
+          preserveAspectRatio="xMidYMid meet"
         >
           {yTicks.map((tick, index) => (
             <line
@@ -520,38 +746,46 @@ function PerformancePanel({
               className="chart-gridline"
             />
           ))}
-          <path d={historyPath} className="history-path" />
-          {displayValues.map((value, index) => {
-            const y = height - ((value - minValue) / Math.max(maxValue - minValue, 1)) * height;
-            return (
-              <circle
-                key={`${index}-${value}`}
-                cx={(index / Math.max(displayValues.length - 1, 1)) * historyWidth}
-                cy={y}
-                r="3.4"
-                className="history-point"
-              >
-                <title>{`Month ${index + 1}: ${money(value, currency)} — deterministic illustrative observation`}</title>
-              </circle>
-            );
-          })}
-          {scenario && scenarioResult && (
-            <>
-              <path
-                d={scenarioPath}
-                className="scenario-path"
-                transform={`translate(${historyWidth}, 0)`}
-              />
-              <circle
-                cx={width}
-                cy={height - ((scenarioResult.endingValue - minValue) / Math.max(maxValue - minValue, 1)) * height}
-                r="5"
-                className="scenario-point"
-              >
-                <title>{`Hypothetical scenario value: ${money(scenarioResult.endingValue, currency)}`}</title>
-              </circle>
-            </>
-          )}
+          <g key={`${historyPath}-${scenarioPath}`}>
+            <path
+              d={historyPath}
+              pathLength="1"
+              className={`history-path ${historyIsPositive ? "market-up" : "market-down"}`}
+            />
+            {displayValues.map((value, index) => {
+              const y = height - ((value - minValue) / Math.max(maxValue - minValue, 1)) * height;
+              return (
+                <circle
+                  key={`${index}-${value}`}
+                  cx={(index / Math.max(displayValues.length - 1, 1)) * historyWidth}
+                  cy={y}
+                  r="3.4"
+                  className={`history-point ${historyIsPositive ? "market-up" : "market-down"}`}
+                  style={{ animationDelay: `${850 + index * 32}ms` }}
+                >
+                  <title>{`Month ${index + 1}: ${money(value, currency)} — deterministic illustrative observation`}</title>
+                </circle>
+              );
+            })}
+            {scenario && scenarioResult && (
+              <>
+                <path
+                  d={scenarioPath}
+                  pathLength="1"
+                  className={`scenario-path ${scenarioResult.returnPct >= 0 ? "market-up" : "market-down"}`}
+                  transform={`translate(${historyWidth}, 0)`}
+                />
+                <circle
+                  cx={width}
+                  cy={height - ((scenarioResult.endingValue - minValue) / Math.max(maxValue - minValue, 1)) * height}
+                  r="5"
+                  className={`scenario-point ${scenarioResult.returnPct >= 0 ? "market-up" : "market-down"}`}
+                >
+                  <title>{`Hypothetical scenario value: ${money(scenarioResult.endingValue, currency)}`}</title>
+                </circle>
+              </>
+            )}
+          </g>
         </svg>
       </div>
       <div className={`x-axis-labels${scenario ? " simulation-active" : ""}`}>
@@ -563,9 +797,9 @@ function PerformancePanel({
           <span>Historical drawdown <span className="subtle-copy">from prior peak</span></span>
           <strong className="negative-value">{formatPercent(maximumDrawdown)}</strong>
         </div>
-        <svg viewBox={`0 0 ${width} 64`} className="drawdown-svg" role="img" aria-label={`Illustrative historical drawdown, maximum ${formatPercent(maximumDrawdown)}`}>
+        <svg ref={drawdownRef} viewBox={`0 0 ${width} 64`} className={`drawdown-svg${drawdownIsInView ? " chart-visible" : ""}`} role="img" aria-label={`Illustrative historical drawdown, maximum ${formatPercent(maximumDrawdown)}`}>
           <line x1="0" x2={width} y1="5" y2="5" className="zero-line" />
-          <path d={drawdownPath} className="drawdown-path" />
+          <path d={drawdownPath} pathLength="1" className="drawdown-path" />
         </svg>
       </div>
       <div className="chart-disclaimer">
@@ -671,7 +905,11 @@ function ScenarioPanel({
         </div>
       )}
       {activeScenario && scenarioResult ? (
-        <div className="scenario-result" key={`${activeScenario.id}-${scenarioResult.returnPct}`} aria-live="polite">
+        <div
+          className={`scenario-result ${scenarioResult.pnl < 0 ? "scenario-result-negative" : "scenario-result-positive"}`}
+          key={`${activeScenario.id}-${scenarioResult.returnPct}`}
+          aria-live="polite"
+        >
           <div className="result-topline"><span>Estimated portfolio impact</span><span className="hypothetical-badge">SIMULATED</span></div>
               <div className={`result-value ${scenarioResult.pnl < 0 ? "negative-value" : "positive-value"}`}>
                 {signedMoney(scenarioResult.pnl, currency)}
@@ -764,8 +1002,25 @@ function DiagnosticsPanel({
   scenarioResult: ReturnType<typeof calculateScenario> | null;
   currency: Currency;
 }) {
+  const [draftRiskTolerance, setDraftRiskTolerance] = useState(riskTolerance);
+  const [draftHorizon, setDraftHorizon] = useState(horizon);
+  const [draftLiquidityNeed, setDraftLiquidityNeed] = useState(liquidityNeed);
+  const [draftLossLimit, setDraftLossLimit] = useState(lossLimit);
+  const hasUnappliedChanges =
+    draftRiskTolerance !== riskTolerance ||
+    draftHorizon !== horizon ||
+    draftLiquidityNeed !== liquidityNeed ||
+    draftLossLimit !== lossLimit;
   const { holdings } = normalizeHoldings(portfolio, weights);
   const warnings = calculateWarnings(holdings, riskTolerance, horizon, liquidityNeed, scenarioResult, lossLimit);
+
+  const applySettings = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    onRiskToleranceChange(draftRiskTolerance);
+    onHorizonChange(draftHorizon);
+    onLiquidityNeedChange(draftLiquidityNeed);
+    onLossLimitChange(draftLossLimit);
+  };
 
   return (
     <section className="panel diagnostics-panel">
@@ -776,34 +1031,40 @@ function DiagnosticsPanel({
         </div>
         <span className={`warning-count${warnings.length ? "" : " clear"}`}>{warnings.length} {warnings.length === 1 ? "review" : "reviews"}</span>
       </div>
-      <div className="objective-controls">
-        <label>Risk preference
-          <select value={riskTolerance} onChange={(event) => onRiskToleranceChange(event.target.value)}>
-            <option>Conservative</option><option>Moderate</option><option>Aggressive</option>
-          </select>
-        </label>
-        <label>Horizon
-          <select value={horizon} onChange={(event) => onHorizonChange(Number(event.target.value))}>
-            <option value={1}>1 year</option><option value={3}>3 years</option><option value={5}>5 years</option><option value={10}>10 years</option><option value={15}>15 years</option>
-          </select>
-        </label>
-        <label>Near-term cash need ({currency})
-          <input
-            type="number"
-            min="0"
-            step="25000"
-            value={currency === "USD" ? Math.round(liquidityNeed / illustrativeUsdInr) : liquidityNeed}
-            onChange={(event) => onLiquidityNeedChange(
-              Math.max(0, Number(event.target.value)) * (currency === "USD" ? illustrativeUsdInr : 1),
-            )}
-          />
-        </label>
-        <label>Loss review threshold
-          <select value={lossLimit} onChange={(event) => onLossLimitChange(Number(event.target.value))}>
-            <option value={10}>10% loss</option><option value={15}>15% loss</option><option value={20}>20% loss</option><option value={30}>30% loss</option>
-          </select>
-        </label>
-      </div>
+      <form className="diagnostics-form" onSubmit={applySettings}>
+        <div className="objective-controls">
+          <label>Risk preference
+            <select value={draftRiskTolerance} onChange={(event) => setDraftRiskTolerance(event.target.value)}>
+              <option>Conservative</option><option>Moderate</option><option>Aggressive</option>
+            </select>
+          </label>
+          <label>Horizon
+            <select value={draftHorizon} onChange={(event) => setDraftHorizon(Number(event.target.value))}>
+              <option value={1}>1 year</option><option value={3}>3 years</option><option value={5}>5 years</option><option value={10}>10 years</option><option value={15}>15 years</option>
+            </select>
+          </label>
+          <label>Near-term cash need ({currency})
+            <input
+              type="number"
+              min="0"
+              step="25000"
+              value={currency === "USD" ? Math.round(draftLiquidityNeed / illustrativeUsdInr) : draftLiquidityNeed}
+              onChange={(event) => setDraftLiquidityNeed(
+                Math.max(0, Number(event.target.value)) * (currency === "USD" ? illustrativeUsdInr : 1),
+              )}
+            />
+          </label>
+          <label>Loss review threshold
+            <select value={draftLossLimit} onChange={(event) => setDraftLossLimit(Number(event.target.value))}>
+              <option value={10}>10% loss</option><option value={15}>15% loss</option><option value={20}>20% loss</option><option value={30}>30% loss</option>
+            </select>
+          </label>
+        </div>
+        <div className="diagnostics-actions">
+          <span aria-live="polite">{hasUnappliedChanges ? "Settings changed — apply to update reviews." : "Reviews use the current settings."}</span>
+          <button className="apply-settings" type="submit" disabled={!hasUnappliedChanges}>Apply settings</button>
+        </div>
+      </form>
       <div className="diagnostics-list" aria-live="polite">
         {warnings.length ? warnings.map((warning, index) => (
           <article className={`diagnostic-item ${warning.severity}`} key={`${warning.title}-${index}`}>
@@ -918,6 +1179,499 @@ function ComparisonPanel({
   );
 }
 
+function requestErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function apiAssets(portfolio: Portfolio, weights: number[]) {
+  return normalizeHoldings(portfolio, weights).holdings.map((holding) => ({
+    ticker: holding.ticker,
+    name: holding.name,
+    sector: holding.sector,
+    amount_inr: holding.marketValue,
+    asset_class: holding.assetClass,
+    liquidity_tag: holding.liquidity,
+    currency_exposure: holding.currencyExposure,
+  }));
+}
+
+function RiskSummaryEngine({
+  payload,
+  currency,
+}: {
+  payload: ScenarioRiskRequest;
+  currency: Currency;
+}) {
+  const [result, setResult] = useState<ScenarioRiskResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const runAnalysis = async () => {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await analyzeScenario(payload));
+    } catch (requestError) {
+      setError(requestErrorMessage(requestError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <section className="panel api-risk-panel">
+      <div className="panel-heading">
+        <div>
+          <div className="eyebrow">Risk engine · Full analysis</div>
+          <h2>Portfolio risk summary</h2>
+        </div>
+        <button type="button" className="text-button api-run-button" onClick={runAnalysis} disabled={loading}>
+          {loading ? "Analyzing…" : "Run full analysis"}
+        </button>
+      </div>
+      <p className="panel-intro">
+        This analysis uses the configured backend engine. Existing dashboard samples remain illustrative until an API response is available.
+      </p>
+      {error && <div className="api-error" role="alert">{error}</div>}
+      {loading && <div className="api-loading" role="status">Waiting for the risk engine response…</div>}
+      {result && (
+        <>
+          <div className="api-summary-grid">
+            <div><span>Total portfolio value</span><strong>{money(result.summary.total_value_inr, currency, true)}</strong></div>
+            <div><span>Stressed median value</span><strong>{money(result.summary.stressed_value_median_inr, currency, true)}</strong></div>
+            <div><span>Estimated impact</span><strong className={result.summary.estimated_impact_inr < 0 ? "negative-value" : "positive-value"}>{signedMoney(result.summary.estimated_impact_inr, currency)} <small>({formatPercent(result.summary.estimated_impact_pct)})</small></strong></div>
+            <div><span>Diversification score</span><strong>{result.summary.diversification_score_out_of_100.toFixed(0)}<small> / 100</small></strong></div>
+            <div><span>Illiquid share</span><strong>{formatPercent(result.summary["illiquid_ share_pct"])}</strong></div>
+            <div><span>Annualized volatility</span><strong>{formatPercent(result.summary.annualized_volatility_pct)}</strong></div>
+          </div>
+          <div className="api-analysis-grid">
+            <div className="api-analysis-block">
+              <div className="api-block-heading"><h3>Correlation heatmap</h3><span>Pairwise holding correlation</span></div>
+              {result.correlation_matrix.tickers.length ? (
+                <div className="api-correlation-wrap">
+                  <table className="api-correlation-table">
+                    <thead>
+                      <tr><th aria-label="Holding" />{result.correlation_matrix.tickers.map((ticker) => <th key={ticker}>{ticker}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {result.correlation_matrix.tickers.map((ticker, row) => (
+                        <tr key={ticker}>
+                          <th>{ticker}</th>
+                          {result.correlation_matrix.tickers.map((column, col) => {
+                            const value = result.correlation_matrix.matrix[row]?.[col];
+                            const className = value === undefined
+                              ? "neutral"
+                              : value > 0.75
+                                ? "high-correlation"
+                                : value > 0
+                                  ? "positive"
+                                  : "negative";
+                            return <td className={className} key={column} title={`${ticker} and ${column}: ${value?.toFixed(2) ?? "not available"}`}>{value?.toFixed(2) ?? "—"}</td>;
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <p className="api-empty">The engine returned no holding correlations.</p>}
+              {result.correlation_matrix.high_correlation_warning && (
+                <p className="api-inline-warning">{result.correlation_matrix.high_correlation_warning}</p>
+              )}
+            </div>
+            <div className="api-analysis-block">
+              <div className="api-block-heading"><h3>Stochastic projection</h3><span>P10 / P50 / P90 · rebalanced P50</span></div>
+              <RiskProjectionChart result={result} currency={currency} />
+              <p className="api-disclaimer">{result.chart_data.disclaimer}</p>
+            </div>
+          </div>
+          <div className="api-analysis-grid">
+            <div className="api-analysis-block">
+              <div className="api-block-heading"><h3>Goal and liquidity conflicts</h3><span>Fiduciary trilemma review</span></div>
+              {result.ai_analysis.goal_conflicts.length ? (
+                <ul className="api-conflict-list">
+                  {result.ai_analysis.goal_conflicts.map((conflict, index) => (
+                    <li key={`${conflict.type}-${index}`} className={`severity-${conflict.severity.toLowerCase()}`}>
+                      <strong>{conflict.type.replaceAll("_", " ")}</strong>
+                      <span>{conflict.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="api-empty">The engine returned no goal conflicts for these inputs.</p>}
+            </div>
+            <div className="api-analysis-block">
+              <div className="api-block-heading"><h3>{result.ai_analysis.alternative_portfolio.name}</h3><span>Illustrative alternative</span></div>
+              <div className="api-alternative-summary">
+                <span>Modeled drawdown saved <strong>{money(result.ai_analysis.alternative_portfolio.drawdown_saved_inr, currency)}</strong></span>
+                <span>Stressed median <strong>{money(result.ai_analysis.alternative_portfolio.stressed_value_median_inr, currency)}</strong></span>
+              </div>
+              <p>{result.ai_analysis.alternative_portfolio.tradeoff_explanation}</p>
+              <div className="api-asset-chips">
+                {result.ai_analysis.alternative_portfolio.proposed_assets.map((asset) => (
+                  <span key={asset.ticker}>{asset.ticker} · {formatPercent(asset.weight_pct)}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          {result.ai_analysis.assumptions_used.length > 0 && (
+            <p className="api-assumptions"><strong>Model assumptions:</strong> {result.ai_analysis.assumptions_used.join(" · ")}</p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function RiskProjectionChart({
+  result,
+  currency,
+}: {
+  result: ScenarioRiskResponse;
+  currency: Currency;
+}) {
+  const history = result.chart_data.historical_observations;
+  const projection = result.chart_data.hypothetical_projection_cone;
+  if (history.length < 2 || projection.length === 0) {
+    return <p className="api-empty">The engine did not return enough observations to draw the projection.</p>;
+  }
+
+  const width = 720;
+  const height = 210;
+  const pointCount = history.length + projection.length;
+  const values = [
+    ...history.map((point) => point.actual_value),
+    ...projection.flatMap((point) => [
+      point.p10_worst_case,
+      point.p50_median_case,
+      point.p90_best_case,
+      point.rebalanced_p50,
+    ]),
+  ];
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const range = maximum - minimum || 1;
+  const x = (index: number) => (index / Math.max(pointCount - 1, 1)) * width;
+  const y = (value: number) => height - ((value - minimum) / range) * (height - 12) - 6;
+  const linePath = (points: Array<{ index: number; value: number }>) =>
+    points.map((point, index) => `${index === 0 ? "M" : "L"}${x(point.index).toFixed(1)},${y(point.value).toFixed(1)}`).join(" ");
+  const historyPath = linePath(history.map((point, index) => ({ index, value: point.actual_value })));
+  const firstProjectionIndex = history.length - 1;
+  const p10 = [
+    { index: firstProjectionIndex, value: history.at(-1)!.actual_value },
+    ...projection.map((point, index) => ({ index: firstProjectionIndex + index + 1, value: point.p10_worst_case })),
+  ];
+  const p50 = [
+    { index: firstProjectionIndex, value: history.at(-1)!.actual_value },
+    ...projection.map((point, index) => ({ index: firstProjectionIndex + index + 1, value: point.p50_median_case })),
+  ];
+  const p90 = [
+    { index: firstProjectionIndex, value: history.at(-1)!.actual_value },
+    ...projection.map((point, index) => ({ index: firstProjectionIndex + index + 1, value: point.p90_best_case })),
+  ];
+  const rebalanced = [
+    { index: firstProjectionIndex, value: history.at(-1)!.actual_value },
+    ...projection.map((point, index) => ({ index: firstProjectionIndex + index + 1, value: point.rebalanced_p50 })),
+  ];
+  const cone = `${linePath(p90)} ${p10.slice().reverse().map((point) => `L${x(point.index).toFixed(1)},${y(point.value).toFixed(1)}`).join(" ")} Z`;
+
+  return (
+    <>
+      <div className="api-chart-legend">
+        <span className="actual-key">Historical</span>
+        <span className="p10-key">P10 worst</span>
+        <span className="p50-key">P50 median</span>
+        <span className="p90-key">P90 best</span>
+        <span className="rebalance-key">Rebalanced</span>
+      </div>
+      <svg className="api-fan-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Backend historical observations and hypothetical projection cone">
+        {[0, 1, 2, 3].map((tick) => {
+          const yPos = (tick / 3) * height;
+          const value = maximum - (tick / 3) * range;
+          return <g key={tick}><line x1="0" x2={width} y1={yPos} y2={yPos} className="chart-gridline" /><text x="3" y={yPos - 4}>{money(value, currency, true)}</text></g>;
+        })}
+        <path d={cone} className="api-cone-area" />
+        <path d={historyPath} className="api-history-line" />
+        <path d={linePath(p10)} className="api-p10-line" />
+        <path d={linePath(p50)} className="api-p50-line" />
+        <path d={linePath(p90)} className="api-p90-line" />
+        <path d={linePath(rebalanced)} className="api-rebalanced-line" />
+      </svg>
+      <div className="api-chart-axis"><span>{history[0].month}</span><span>{history.at(-1)!.month} · shock point</span><span>{projection.at(-1)!.month} · projection</span></div>
+    </>
+  );
+}
+
+const butterflyScenarios = [
+  { id: "oil_supply_disruption", label: "Global oil supply disruption", detail: "Crude oil price shock", magnitude: 20, unit: "%" },
+  { id: "repo_rate_hike", label: "Aggressive RBI repo rate hike", detail: "Policy rate increase", magnitude: 75, unit: "bps" },
+  { id: "tech_spending_freeze", label: "US enterprise tech freeze", detail: "Technology spending shock", magnitude: 25, unit: "%" },
+] as const;
+
+function ButterflyContagionPage({
+  portfolio,
+  weights,
+  currency,
+}: {
+  portfolio: Portfolio;
+  weights: number[];
+  currency: Currency;
+}) {
+  const [scenarioId, setScenarioId] = useState<string>(butterflyScenarios[0].id);
+  const selectedScenario = butterflyScenarios.find((scenario) => scenario.id === scenarioId) ?? butterflyScenarios[0];
+  const [magnitude, setMagnitude] = useState<number>(selectedScenario.magnitude);
+  const [result, setResult] = useState<ContagionSimulationResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const simulate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const customMagnitude = selectedScenario.unit === "bps" ? magnitude / 100 : magnitude;
+      setResult(await simulateContagion({
+        scenario_id: scenarioId,
+        custom_magnitude_pct: customMagnitude,
+        portfolio: { assets: apiAssets(portfolio, weights) },
+      }));
+    } catch (requestError) {
+      setError(requestErrorMessage(requestError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const strategy = result?.stages.find((stage) => stage.inoculation_strategy)?.inoculation_strategy;
+  const orderedStages = result ? [...result.stages].sort((a, b) => a.stage_number - b.stage_number) : [];
+
+  return (
+    <div className="api-page-stack">
+      <section className="panel api-control-panel">
+        <div className="panel-heading">
+          <div><div className="eyebrow">Butterfly effect · Forward contagion</div><h2>Trace how a shock spreads</h2></div>
+          <span className="api-mode-tag">Backend simulation</span>
+        </div>
+        <form className="butterfly-controls" onSubmit={simulate}>
+          <label>
+            <span>Macro shock</span>
+            <select value={scenarioId} onChange={(event) => {
+              const nextScenario = butterflyScenarios.find((scenario) => scenario.id === event.target.value);
+              if (nextScenario) {
+                setScenarioId(nextScenario.id);
+                setMagnitude(nextScenario.magnitude);
+              }
+            }}>
+              {butterflyScenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.label}</option>)}
+            </select>
+            <small>{selectedScenario.detail}</small>
+          </label>
+          <label className="magnitude-control">
+            <span>Shock magnitude <strong>{magnitude} {selectedScenario.unit}</strong></span>
+            <input
+              type="range"
+              min="5"
+              max="100"
+              step="1"
+              value={magnitude}
+              aria-label="Macro shock magnitude"
+              onChange={(event) => setMagnitude(Number(event.target.value))}
+            />
+            <small>{selectedScenario.unit === "bps" ? "Basis points" : "Percent shock"}</small>
+          </label>
+          <button type="submit" className="apply-settings" disabled={loading}>{loading ? "Simulating…" : "Run contagion simulation"}</button>
+        </form>
+        {error && <div className="api-error" role="alert">{error}</div>}
+        {loading && <div className="api-loading" role="status">The risk engine is calculating the transmission stages…</div>}
+      </section>
+
+      {result && (
+        <>
+          <section className="api-contagion-summary" aria-label="Contagion simulation summary">
+            <div><span>Starting value</span><strong>{money(result.summary.initial_value, currency, true)}</strong></div>
+            <div><span>Stressed value</span><strong>{money(result.summary.stressed_value, currency, true)}</strong></div>
+            <div><span>Net impact</span><strong className={result.summary.net_impact_inr < 0 ? "negative-value" : "positive-value"}>{signedMoney(result.summary.net_impact_inr, currency)} <small>({formatPercent(result.summary.net_impact_pct)})</small></strong></div>
+            <div><span>Largest drag</span><strong>{result.summary.largest_drag || "Not identified"}</strong></div>
+            <div><span>Largest buffer</span><strong>{result.summary.largest_buffer || "Not identified"}</strong></div>
+          </section>
+          {result.is_false_diversification_detected && (
+            <section className="api-false-diversification" role="status">
+              <strong>False diversification detected</strong>
+              <span>
+                {result.nominal_diversification_score !== undefined && result.effective_tail_diversification_score !== undefined
+                  ? `Nominal diversification ${result.nominal_diversification_score}/100 vs effective tail diversification ${result.effective_tail_diversification_score}/100`
+                  : "The engine found holdings linked to a shared upstream risk."}
+                {result.diversification_haircut_points !== undefined && ` · ${result.diversification_haircut_points} point haircut`}
+                {result.upstream_dependency && ` · Upstream dependency: ${result.upstream_dependency}`}
+              </span>
+            </section>
+          )}
+          <section className="panel cascade-panel">
+            <div className="panel-heading">
+              <div><div className="eyebrow">Causal transmission map</div><h2>{result.scenario.title}</h2></div>
+              <span className="api-mode-tag">Shock {result.scenario.active_shock_magnitude}</span>
+            </div>
+            <p className="panel-intro">{result.scenario.headline}</p>
+            {orderedStages.length ? (
+              <div className="cascade-grid">
+                {orderedStages.map((stage) => (
+                  <article className="cascade-stage" key={`${stage.stage_number}-${stage.stage_name}`}>
+                    <div className="cascade-stage-number">STAGE {stage.stage_number}</div>
+                    <h3>{stage.title ?? stage.stage_name}</h3>
+                    {(stage.description || stage.summary) && <p>{stage.description ?? stage.summary}</p>}
+                    {stage.nodes?.map((node) => (
+                      <div className="cascade-node" key={node.id}>
+                        <div><strong>{node.label}</strong><span className={node.calculated_impact_pct < 0 ? "negative-value" : "positive-value"}>{formatPercent(node.calculated_impact_pct)}</span></div>
+                        <p>{node.description}</p>
+                        <small>β {node.sensitivity_beta.toFixed(2)} · {node.confidence} confidence</small>
+                        <details><summary>Transmission rationale</summary><p>{node.rationale}</p></details>
+                      </div>
+                    ))}
+                    {stage.affected_holdings?.map((holding) => (
+                      <div className="cascade-node" key={holding.ticker}>
+                        <div><strong>{holding.ticker}</strong><span className={holding.portfolio_impact_inr < 0 ? "negative-value" : "positive-value"}>{signedMoney(holding.portfolio_impact_inr, currency)}</span></div>
+                        <p>{holding.transmission_pathway}</p>
+                        <small>{formatPercent(holding.weight_pct)} weight · {formatPercent(holding.estimated_return_pct)} estimated return{holding.is_hedging ? " · Hedge" : ""}</small>
+                      </div>
+                    ))}
+                  </article>
+                ))}
+              </div>
+            ) : <p className="api-empty">The engine returned no transmission stages.</p>}
+          </section>
+          {strategy && (
+            <section className="panel inoculation-panel">
+              <div className="panel-heading">
+                <div><div className="eyebrow">Contagion inoculation</div><h2>{strategy.is_hedging_needed ? "Potential defensive rebalance" : "No hedge flagged by the model"}</h2></div>
+                <span className="api-mode-tag">{strategy.hedge_instrument}</span>
+              </div>
+              <div className="inoculation-metrics">
+                <div><span>Drawdown saved</span><strong>{money(strategy.drawdown_saved_inr, currency)}</strong></div>
+                <div><span>Post-hedge impact</span><strong>{formatPercent(strategy.post_hedge_impact_pct)}</strong></div>
+                <div><span>Proposed reallocation</span><strong>{money(strategy.reallocation_amount_inr, currency)}</strong></div>
+              </div>
+              <p className="panel-intro">Opportunity cost: {strategy.opportunity_cost}</p>
+              {strategy.proposed_rebalance.length > 0 && (
+                <ul className="rebalance-list">
+                  {strategy.proposed_rebalance.map((action, index) => (
+                    <li key={`${action.ticker}-${index}`}><strong>{action.action}</strong><span>{action.ticker}</span><b>{money(action.amount_change_inr, currency)}</b><small>{action.reason}</small></li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ReverseStressPage({
+  portfolio,
+  weights,
+  currency,
+}: {
+  portfolio: Portfolio;
+  weights: number[];
+  currency: Currency;
+}) {
+  const [targetLoss, setTargetLoss] = useState(15);
+  const [result, setResult] = useState<ReverseStressTestResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const runTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await runReverseStressTest({
+        target_loss_pct: targetLoss,
+        assets: apiAssets(portfolio, weights),
+      }));
+    } catch (requestError) {
+      setError(requestErrorMessage(requestError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="api-page-stack">
+      <section className="panel api-control-panel">
+        <div className="panel-heading">
+          <div><div className="eyebrow">Reverse stress test · Breaking point solver</div><h2>What shock would breach your limit?</h2></div>
+          <span className="api-mode-tag">Backend solver</span>
+        </div>
+        <form className="reverse-controls" onSubmit={runTest}>
+          <label>
+            <span>Target portfolio loss <strong>{formatPercent(targetLoss)}</strong></span>
+            <input type="range" min="1" max="50" step="0.5" value={targetLoss} aria-label="Target portfolio loss percentage" onChange={(event) => setTargetLoss(Number(event.target.value))} />
+            <small>Choose the portfolio loss threshold to solve for.</small>
+          </label>
+          <strong className="reverse-target-value">{money(portfolio.marketValue * targetLoss / 100, currency)} target loss</strong>
+          <button type="submit" className="apply-settings" disabled={loading}>{loading ? "Solving…" : "Find breaking point"}</button>
+        </form>
+        {error && <div className="api-error" role="alert">{error}</div>}
+        {loading && <div className="api-loading" role="status">Solving the reverse stress scenario…</div>}
+      </section>
+      {result && (
+        <>
+          <section className="reverse-summary-grid">
+            <div className="panel reverse-distance-card">
+              <span>Mahalanobis distance</span>
+              <strong>{result.mahalanobis_distance_sigmas.toFixed(2)} <small>σ</small></strong>
+              <div className="distance-meter" role="meter" aria-label="Mahalanobis distance" aria-valuemin={0} aria-valuemax={3} aria-valuenow={Math.min(result.mahalanobis_distance_sigmas, 3)}><span style={{ width: `${Math.min(Math.max(result.mahalanobis_distance_sigmas / 3 * 100, 0), 100)}%` }} /></div>
+              <small>{result.failure_frequency_description}</small>
+            </div>
+            <div className="panel reverse-distance-card">
+              <span>Estimated failure probability</span>
+              <strong>{formatPercent(result.failure_probability_estimate * 100)}</strong>
+              <small>Model estimate; not a guarantee or market forecast.</small>
+            </div>
+            <div className="panel reverse-distance-card">
+              <span>Portfolio volatility</span>
+              <strong>{formatPercent(result.portfolio_volatility_pct)}</strong>
+              <small>Target loss: {formatPercent(result.target_loss_pct)}</small>
+            </div>
+          </section>
+          <section className="panel fragility-panel">
+            <div className="panel-heading">
+              <div><div className="eyebrow">Asset fragility ranking</div><h2>Required shocks by holding</h2></div>
+            </div>
+            <div className="fragility-table-wrap">
+              <table className="fragility-table">
+                <thead><tr><th>Rank</th><th>Holding</th><th>Weight</th><th>Portfolio beta</th><th>Required shock</th><th>Value loss</th><th>Risk contribution</th></tr></thead>
+                <tbody>
+                  {[...result.fragility_ranking].sort((a, b) => a.fragility_rank - b.fragility_rank).map((asset) => (
+                    <tr key={asset.ticker}>
+                      <td>#{asset.fragility_rank}</td>
+                      <th><strong>{asset.ticker}</strong><small>{asset.name} · {asset.sector}</small></th>
+                      <td>{formatPercent(asset.weight_pct)}</td>
+                      <td>{asset.beta_to_portfolio.toFixed(2)}</td>
+                      <td className="negative-value">{formatPercent(asset.required_shock_pct)}</td>
+                      <td className="negative-value">{money(asset.value_loss_inr, currency)}</td>
+                      <td>{formatPercent(asset.marginal_risk_contribution_pct)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="reverse-verdict"><span>Breaking point</span><strong>{result.summary_narrative}</strong></div>
+            {Object.keys(result.most_probable_failure_scenario).length > 0 && (
+              <details className="failure-scenario-details">
+                <summary>Most probable failure scenario inputs</summary>
+                <dl>{Object.entries(result.most_probable_failure_scenario).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{value}</dd></div>)}</dl>
+              </details>
+            )}
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [savedState] = useState(loadSavedState);
   const [activePage] = useState(currentPage);
@@ -932,7 +1686,8 @@ export default function Dashboard() {
   const [horizon, setHorizon] = useState(savedState?.horizon ?? portfolio.investorProfile.horizon_years);
   const [liquidityNeed, setLiquidityNeed] = useState(savedState?.liquidityNeed ?? demoLiquidityNeed(portfolio));
   const [lossLimit, setLossLimit] = useState(savedState?.lossLimit ?? 15);
-  const [darkMode, setDarkMode] = useState(savedState?.darkMode ?? false);
+  const [darkMode, setDarkMode] = useState(loadSessionTheme);
+  const [diagnosticsFormVersion, setDiagnosticsFormVersion] = useState(0);
   const pageMeta = pages.find((page) => page.id === activePage) ?? pages[0];
 
   useEffect(() => {
@@ -948,7 +1703,6 @@ export default function Dashboard() {
         horizon,
         liquidityNeed,
         lossLimit,
-        darkMode,
       } satisfies SavedDashboardState));
     } catch (error) {
       console.error("Could not save Vertex dashboard settings.", error);
@@ -964,17 +1718,25 @@ export default function Dashboard() {
     horizon,
     liquidityNeed,
     lossLimit,
-    darkMode,
   ]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem("vertex-theme", darkMode ? "dark" : "light");
+    } catch (error) {
+      console.error("Could not save the Vertex theme preference.", error);
+    }
+  }, [darkMode]);
 
   useEffect(() => {
     document.title = `Vertex | ${pageMeta.title}`;
   }, [pageMeta.title]);
 
   useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
     const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (themeColor) {
-      themeColor.content = darkMode ? "#171620" : "#F5F8F5";
+      themeColor.content = darkMode ? "#0B0F14" : "#F2EEEB";
     }
   }, [darkMode]);
 
@@ -986,6 +1748,23 @@ export default function Dashboard() {
     () => activeScenario ? calculateScenario(portfolio, weights, activeScenario) : null,
     [portfolio, weights, activeScenario],
   );
+  const riskSummaryRequest: ScenarioRiskRequest = {
+    investor_profile: {
+      horizon_years: horizon,
+      risk_tolerance: riskTolerance === "Conservative" ? "Low" : riskTolerance === "Aggressive" ? "High" : "Moderate",
+      liquidity_need: portfolio.investorProfile.liquidity_need,
+      target_goal_inr: portfolio.investorProfile.target_goal_inr,
+    },
+    assets: apiAssets(portfolio, weights),
+    scenario: {
+      preset_name: activeScenario?.label ?? "Baseline",
+      market_decline_pct: activeScenario?.marketPct ?? 0,
+      interest_rate_change_bps: activeScenario?.rateBps ?? 0,
+      sector_shocks: activeScenario?.technologyPct ? { IT: activeScenario.technologyPct } : {},
+      currency_inr_usd_shift_pct: activeScenario?.fxPct ?? 0,
+      custom_ai_prompt: "",
+    },
+  };
 
   const changePortfolio = (id: string) => {
     const next = portfolios.find((item) => item.id === id);
@@ -996,6 +1775,8 @@ export default function Dashboard() {
     setRiskTolerance(profileRisk(next.investorProfile));
     setHorizon(next.investorProfile.horizon_years);
     setLiquidityNeed(demoLiquidityNeed(next));
+    setLossLimit(15);
+    setDiagnosticsFormVersion((version) => version + 1);
   };
   const updateWeight = (
     setValue: (weights: number[]) => void,
@@ -1017,6 +1798,7 @@ export default function Dashboard() {
     setHorizon(portfolio.investorProfile.horizon_years);
     setLiquidityNeed(demoLiquidityNeed(portfolio));
     setLossLimit(15);
+    setDiagnosticsFormVersion((version) => version + 1);
   };
   const customScenarioChange = (
     key: "marketPct" | "rateBps" | "technologyPct" | "fxPct",
@@ -1031,6 +1813,7 @@ export default function Dashboard() {
 
   return (
     <main className="aperture-app" data-theme={darkMode ? "dark" : "light"}>
+      <ClickEffects />
       <Header
         activePage={activePage}
         portfolioId={portfolioId}
@@ -1073,30 +1856,30 @@ export default function Dashboard() {
                 scenario={activeScenario}
                 scenarioResult={scenarioResult}
               />
-              <div className="right-column">
-                <ScenarioPanel
-                  activeScenario={activeScenario}
-                  scenarioResult={scenarioResult}
-                  onSelect={setActiveScenario}
-                  onCustomChange={customScenarioChange}
-                  portfolio={portfolio}
-                  currency={currency}
-                />
-                <DiagnosticsPanel
-                  portfolio={portfolio}
-                  weights={weights}
-                  riskTolerance={riskTolerance}
-                  onRiskToleranceChange={setRiskTolerance}
-                  horizon={horizon}
-                  onHorizonChange={setHorizon}
-                  liquidityNeed={liquidityNeed}
-                  onLiquidityNeedChange={setLiquidityNeed}
-                  lossLimit={lossLimit}
-                  onLossLimitChange={setLossLimit}
-                  scenarioResult={scenarioResult}
-                  currency={currency}
-                />
-              </div>
+              <ScenarioPanel
+                activeScenario={activeScenario}
+                scenarioResult={scenarioResult}
+                onSelect={setActiveScenario}
+                onCustomChange={customScenarioChange}
+                portfolio={portfolio}
+                currency={currency}
+              />
+              <DiagnosticsPanel
+                key={`${portfolioId}-${diagnosticsFormVersion}`}
+                portfolio={portfolio}
+                weights={weights}
+                riskTolerance={riskTolerance}
+                onRiskToleranceChange={setRiskTolerance}
+                horizon={horizon}
+                onHorizonChange={setHorizon}
+                liquidityNeed={liquidityNeed}
+                onLiquidityNeedChange={setLiquidityNeed}
+                lossLimit={lossLimit}
+                onLossLimitChange={setLossLimit}
+                scenarioResult={scenarioResult}
+                currency={currency}
+              />
+              <RiskSummaryEngine payload={riskSummaryRequest} currency={currency} />
             </div>
           )}
           {activePage === "allocation" && (
@@ -1109,6 +1892,7 @@ export default function Dashboard() {
                 onRestore={() => setWeights(portfolio.holdings.map((holding) => holding.weight))}
               />
               <DiagnosticsPanel
+                key={`${portfolioId}-${diagnosticsFormVersion}`}
                 portfolio={portfolio}
                 weights={weights}
                 riskTolerance={riskTolerance}
@@ -1143,6 +1927,7 @@ export default function Dashboard() {
                 scenarioResult={scenarioResult}
               />
               <DiagnosticsPanel
+                key={`${portfolioId}-${diagnosticsFormVersion}`}
                 portfolio={portfolio}
                 weights={weights}
                 riskTolerance={riskTolerance}
@@ -1180,6 +1965,19 @@ export default function Dashboard() {
               />
             </div>
           )}
+          {activePage === "news" && (
+            <section className="panel news-placeholder" aria-labelledby="news-heading">
+              <span className="eyebrow">NEWS</span>
+              <h2 id="news-heading">Market updates will appear here</h2>
+              <p>This section is ready for news and information to be added later.</p>
+            </section>
+          )}
+          {activePage === "butterfly" && (
+            <ButterflyContagionPage portfolio={portfolio} weights={weights} currency={currency} />
+          )}
+          {activePage === "reverse" && (
+            <ReverseStressPage portfolio={portfolio} weights={weights} currency={currency} />
+          )}
           {activePage === "overview" && (
             <div className="overview-allocation-teaser">
               <div><span className="eyebrow">Portfolio composition</span><strong>Review the holdings and concentration behind this risk profile.</strong></div>
@@ -1192,6 +1990,26 @@ export default function Dashboard() {
               <a href="index.html?page=stresslab">Open Stress Lab <span>→</span></a>
             </div>
           )}
+          <div className="page-endcap">
+            <div className="endcap-copy">
+              <span className="eyebrow">{pageMeta.title} · LEARNING NOTE</span>
+              <strong>{pageGuidance[activePage].title}</strong>
+            </div>
+            <ul className="endcap-tips">
+              {pageGuidance[activePage].tips.map((tip, index) => (
+                <li key={tip}><span>0{index + 1}</span>{tip}</li>
+              ))}
+            </ul>
+            <div className="endcap-orbit" aria-hidden="true">
+              <svg viewBox="0 0 132 58" focusable="false">
+                <path d="M4 42c18-1 20-28 40-28s20 30 40 30 22-23 44-23" />
+                <circle cx="44" cy="14" r="4" />
+                <circle cx="84" cy="44" r="4" />
+                <circle cx="128" cy="21" r="4" />
+              </svg>
+              <span>RISK / IN CONTEXT</span>
+            </div>
+          </div>
         </div>
         <footer className="app-footer">
           <span><span className="footer-mark">V</span> VERTEX <span>PORTFOLIO RISK LAB</span></span>
