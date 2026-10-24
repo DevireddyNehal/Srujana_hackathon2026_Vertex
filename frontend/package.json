@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:website": "tsc -b && vite build --config src/pages/website/tunnel.vite.config.ts",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:website": "vite preview --config src/pages/website/tunnel.vite.config.ts",
+    "share:website": "powershell -NoProfile -ExecutionPolicy Bypass -File src/pages/website/start-tunnel.ps1"
   },
   "dependencies": {
     "react": "^19.3.1",
