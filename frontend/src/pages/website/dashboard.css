@@ -4434,3 +4434,767 @@ button {
     gap: 5px;
   }
 }
+
+.aperture-app[data-theme="dark"] {
+  --ink: #e4e9e7;
+  --muted: #9aa7a8;
+  --faint: #778587;
+  --line: #303a3e;
+  --surface: #1c2327;
+  --surface-soft: #20292d;
+  --lavender: #263237;
+  --purple: #6faaa1;
+  --purple-strong: #76b8ad;
+  --purple-light: #a4d0c8;
+  --purple-wash: #243633;
+  --red: #cf7776;
+  --red-wash: #38282b;
+  --green: #75bd92;
+  --green-wash: #24382d;
+  --amber: #d1a45f;
+  --amber-wash: #383124;
+  --allocation-color-1: #76b8ad;
+  --allocation-color-2: #7899a5;
+  --allocation-color-3: #91a7a2;
+  --allocation-color-4: #a7b08c;
+  --allocation-color-5: #c3a777;
+  --allocation-color-6: #758c93;
+  --risk-negative: 117, 189, 146;
+  --risk-neutral: 119, 133, 135;
+  --risk-positive: 207, 119, 118;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  background: #151a1d;
+  color: var(--ink);
+}
+
+.aperture-app[data-theme="dark"] .app-header {
+  border-color: #2d373b;
+  background: rgba(21, 26, 29, 0.97);
+}
+
+.aperture-app[data-theme="dark"] .panel,
+.aperture-app[data-theme="dark"] .metric-strip,
+.aperture-app[data-theme="dark"] .overview-allocation-teaser,
+.aperture-app[data-theme="dark"] .overview-compare-teaser {
+  border-color: #303a3e;
+  background: #1c2327;
+  box-shadow: var(--shadow);
+}
+
+.aperture-app[data-theme="dark"] .metric-card,
+.aperture-app[data-theme="dark"] .panel-heading,
+.aperture-app[data-theme="dark"] .holding-table th,
+.aperture-app[data-theme="dark"] .holding-table td,
+.aperture-app[data-theme="dark"] .comparison-table th,
+.aperture-app[data-theme="dark"] .comparison-table td,
+.aperture-app[data-theme="dark"] .allocation-foot,
+.aperture-app[data-theme="dark"] .correlation-block,
+.aperture-app[data-theme="dark"] .comparison-panel,
+.aperture-app[data-theme="dark"] .diagnostics-panel,
+.aperture-app[data-theme="dark"] .contributors,
+.aperture-app[data-theme="dark"] .alternative-editor {
+  border-color: #303a3e;
+}
+
+.aperture-app[data-theme="dark"] .metric-card:nth-child(2),
+.aperture-app[data-theme="dark"] .metric-card:nth-child(3),
+.aperture-app[data-theme="dark"] .metric-card:nth-child(5),
+.aperture-app[data-theme="dark"] .var-card,
+.aperture-app[data-theme="dark"] .allocation-panel .panel-heading,
+.aperture-app[data-theme="dark"] .scenario-panel .panel-heading,
+.aperture-app[data-theme="dark"] .performance-panel .panel-heading,
+.aperture-app[data-theme="dark"] .comparison-panel .panel-heading,
+.aperture-app[data-theme="dark"] .overview-allocation-teaser,
+.aperture-app[data-theme="dark"] .overview-compare-teaser {
+  background: #20292d;
+}
+
+.aperture-app[data-theme="dark"] .metric-card:nth-child(4),
+.aperture-app[data-theme="dark"] .scenario-result {
+  background: #292629;
+}
+
+.aperture-app[data-theme="dark"] .brand-mark,
+.aperture-app[data-theme="dark"] .footer-mark {
+  background: #527e78;
+}
+
+.aperture-app[data-theme="dark"] .brand-divider,
+.aperture-app[data-theme="dark"] .breadcrumb span,
+.aperture-app[data-theme="dark"] .title-separator {
+  color: #71817f;
+}
+
+.aperture-app[data-theme="dark"] .top-nav a,
+.aperture-app[data-theme="dark"] .data-status {
+  color: #aab6b5;
+}
+
+.aperture-app[data-theme="dark"] .top-nav a.active,
+.aperture-app[data-theme="dark"] .top-nav a:hover,
+.aperture-app[data-theme="dark"] .eyebrow,
+.aperture-app[data-theme="dark"] .text-button,
+.aperture-app[data-theme="dark"] .overview-allocation-teaser a,
+.aperture-app[data-theme="dark"] .overview-compare-teaser a,
+.aperture-app[data-theme="dark"] .app-footer a,
+.aperture-app[data-theme="dark"] .comparison-table td:last-child {
+  color: #9bc6bd;
+}
+
+.aperture-app[data-theme="dark"] .top-nav a::after {
+  background: #76b8ad;
+}
+
+.aperture-app[data-theme="dark"] .theme-toggle,
+.aperture-app[data-theme="dark"] .reset-view,
+.aperture-app[data-theme="dark"] .header-select select,
+.aperture-app[data-theme="dark"] .weight-field,
+.aperture-app[data-theme="dark"] .weight-field input,
+.aperture-app[data-theme="dark"] .objective-controls select,
+.aperture-app[data-theme="dark"] .objective-controls input,
+.aperture-app[data-theme="dark"] .alternative-weights label,
+.aperture-app[data-theme="dark"] .alternative-weights input {
+  border-color: #3a474a;
+  background: #20292d;
+  color: #dce4e2;
+}
+
+.aperture-app[data-theme="dark"] .theme-toggle:hover,
+.aperture-app[data-theme="dark"] .reset-view:hover,
+.aperture-app[data-theme="dark"] .quiet-action:hover,
+.aperture-app[data-theme="dark"] .text-button:hover {
+  border-color: #58756f;
+  background: #293a39;
+}
+
+.aperture-app[data-theme="dark"] .quiet-action,
+.aperture-app[data-theme="dark"] .text-button,
+.aperture-app[data-theme="dark"] .overview-allocation-teaser a,
+.aperture-app[data-theme="dark"] .overview-compare-teaser a {
+  border-color: #3a474a;
+  background: #20292d;
+  color: #9bc6bd;
+}
+
+.aperture-app[data-theme="dark"] .header-select::after {
+  border-color: #aebbb9;
+}
+
+.aperture-app[data-theme="dark"] .holding-table th,
+.aperture-app[data-theme="dark"] .comparison-table thead th {
+  background: #20292d;
+  color: #aab6b5;
+}
+
+.aperture-app[data-theme="dark"] .holding-table td,
+.aperture-app[data-theme="dark"] .comparison-table td {
+  color: #cbd4d2;
+}
+
+.aperture-app[data-theme="dark"] .donut-center::before,
+.aperture-app[data-theme="dark"] .allocation-donut::after {
+  background: #1c2327;
+}
+
+.aperture-app[data-theme="dark"] .liquidity-note,
+.aperture-app[data-theme="dark"] .chart-disclaimer,
+.aperture-app[data-theme="dark"] .assumption-note,
+.aperture-app[data-theme="dark"] .diagnostic-footnote,
+.aperture-app[data-theme="dark"] .tradeoff-note,
+.aperture-app[data-theme="dark"] .custom-controls,
+.aperture-app[data-theme="dark"] .scenario-idle {
+  border-color: #303a3e;
+  background: #20292d;
+}
+
+.aperture-app[data-theme="dark"] .performance-chart {
+  border-color: #303a3e;
+  background: #171e21;
+}
+
+.aperture-app[data-theme="dark"] .chart-gridline,
+.aperture-app[data-theme="dark"] .zero-line {
+  stroke: #354145;
+}
+
+.aperture-app[data-theme="dark"] .history-path,
+.aperture-app[data-theme="dark"] .history-point {
+  stroke: #76b8ad;
+}
+
+.aperture-app[data-theme="dark"] .scenario-choice {
+  border-color: #303a3e;
+  background: #20292d;
+}
+
+.aperture-app[data-theme="dark"] .scenario-choice:hover,
+.aperture-app[data-theme="dark"] .scenario-choice.selected {
+  border-color: #58756f;
+  background: #243330;
+}
+
+.aperture-app[data-theme="dark"] .scenario-choice.selected {
+  box-shadow: inset 3px 0 #76b8ad;
+}
+
+.aperture-app[data-theme="dark"] .scenario-choice.selected .scenario-radio,
+.aperture-app[data-theme="dark"] .scenario-choice.selected .scenario-radio::after {
+  border-color: #76b8ad;
+  background: #76b8ad;
+}
+
+.aperture-app[data-theme="dark"] .historical-tag {
+  border-color: #3e5a54;
+  background: #243633;
+  color: #a4ccc3;
+}
+
+.aperture-app[data-theme="dark"] .alt-indicator,
+.aperture-app[data-theme="dark"] .metric-dot.violet,
+.aperture-app[data-theme="dark"] .tradeoff-note > span,
+.aperture-app[data-theme="dark"] .disclaimer-icon,
+.aperture-app[data-theme="dark"] .correlation-window {
+  border-color: #3e5a54;
+  background-color: #293a39;
+  color: #9bc6bd;
+}
+
+.aperture-app[data-theme="dark"] .positive-value {
+  color: #75bd92;
+}
+
+.aperture-app[data-theme="dark"] .negative-value,
+.aperture-app[data-theme="dark"] .x-axis-labels strong,
+.aperture-app[data-theme="dark"] .scenario-path,
+.aperture-app[data-theme="dark"] .scenario-point,
+.aperture-app[data-theme="dark"] .simulated-line {
+  color: #cf7776;
+  stroke: #cf7776;
+  border-color: #cf7776;
+}
+
+.aperture-app[data-theme="dark"] .drawdown-path {
+  fill: rgba(207, 119, 118, 0.12);
+  stroke: #cf7776;
+}
+
+.aperture-app[data-theme="dark"] .diagnostic-item.watch,
+.aperture-app[data-theme="dark"] .warning-count,
+.aperture-app[data-theme="dark"] .inline-notice,
+.aperture-app[data-theme="dark"] .allocation-alert,
+.aperture-app[data-theme="dark"] .liquidity-pill.medium {
+  border-color: #5a4a32;
+  background: #302a22;
+  color: #d7b779;
+}
+
+.aperture-app[data-theme="dark"] .diagnostic-item.clear-item,
+.aperture-app[data-theme="dark"] .warning-count.clear,
+.aperture-app[data-theme="dark"] .liquidity-pill.high {
+  border-color: #355343;
+  background: #24352c;
+  color: #9dc6aa;
+}
+
+.aperture-app[data-theme="dark"] .liquidity-pill.low {
+  border-color: #5a3c3e;
+  background: #38282b;
+  color: #d89b99;
+}
+
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .aperture-app[data-theme="dark"] .panel:hover {
+    border-color: #3e4b4e;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  }
+}
+
+body {
+  background: #f4f2eb;
+}
+
+.aperture-app[data-theme="light"] {
+  --ink: #222b27;
+  --muted: #68736d;
+  --faint: #849089;
+  --line: #dfe2d9;
+  --surface: #fff;
+  --surface-soft: #f4f2eb;
+  --lavender: #e9eee8;
+  --purple: #315b49;
+  --purple-strong: #315b49;
+  --purple-light: #6b8d79;
+  --purple-wash: #e8eee8;
+  --red: #b54743;
+  --red-wash: #f8ece9;
+  --green: #287a52;
+  --green-wash: #eaf3ed;
+  --amber: #a96816;
+  --amber-wash: #f8f1e5;
+  --allocation-color-1: #315b49;
+  --allocation-color-2: #688876;
+  --allocation-color-3: #8ba095;
+  --allocation-color-4: #b78643;
+  --allocation-color-5: #aeb8a7;
+  --allocation-color-6: #82989a;
+  --risk-negative: 40, 122, 82;
+  --risk-neutral: 104, 115, 109;
+  --risk-positive: 181, 71, 67;
+  --shadow: 0 8px 22px rgba(34, 43, 39, 0.055);
+  color: #222b27;
+  color-scheme: light;
+  background: #f4f2eb;
+}
+
+.aperture-app[data-theme="light"] .app-header {
+  border-bottom-color: #273a31;
+  background: #192923;
+  color: #f4f2eb;
+  backdrop-filter: none;
+}
+
+.aperture-app[data-theme="light"] .brand,
+.aperture-app[data-theme="light"] .brand-name,
+.aperture-app[data-theme="light"] .top-nav a,
+.aperture-app[data-theme="light"] .data-status {
+  color: #e8eee9;
+}
+
+.aperture-app[data-theme="light"] .brand-name small,
+.aperture-app[data-theme="light"] .brand-divider {
+  color: #aab9af;
+}
+
+.aperture-app[data-theme="light"] .brand-mark,
+.aperture-app[data-theme="light"] .footer-mark {
+  background: #315b49;
+}
+
+.aperture-app[data-theme="light"] .top-nav a:hover,
+.aperture-app[data-theme="light"] .top-nav a.active {
+  color: #fff;
+}
+
+.aperture-app[data-theme="light"] .top-nav a::after {
+  background: #b8cbbd;
+}
+
+.aperture-app[data-theme="light"] .data-status i,
+.aperture-app[data-theme="light"] .live-indicator {
+  background: #8db29a;
+  box-shadow: 0 0 0 3px rgba(141, 178, 154, 0.16);
+}
+
+.aperture-app[data-theme="light"] .header-select::after {
+  border-color: #71827a;
+}
+
+.aperture-app[data-theme="light"] .header-select select {
+  border-color: #dfe2d9;
+  background: #fff;
+  color: #222b27;
+}
+
+.aperture-app[data-theme="light"] .panel,
+.aperture-app[data-theme="light"] .metric-strip,
+.aperture-app[data-theme="light"] .overview-allocation-teaser,
+.aperture-app[data-theme="light"] .overview-compare-teaser {
+  border-color: #dfe2d9;
+  background-color: #fff;
+  box-shadow: var(--shadow);
+}
+
+.aperture-app[data-theme="light"] .metric-card,
+.aperture-app[data-theme="light"] .panel-heading,
+.aperture-app[data-theme="light"] .holding-table th,
+.aperture-app[data-theme="light"] .holding-table td,
+.aperture-app[data-theme="light"] .comparison-table th,
+.aperture-app[data-theme="light"] .comparison-table td,
+.aperture-app[data-theme="light"] .allocation-foot,
+.aperture-app[data-theme="light"] .correlation-block,
+.aperture-app[data-theme="light"] .comparison-panel,
+.aperture-app[data-theme="light"] .diagnostics-panel,
+.aperture-app[data-theme="light"] .contributors,
+.aperture-app[data-theme="light"] .alternative-editor {
+  border-color: #dfe2d9;
+}
+
+.aperture-app[data-theme="light"] .workspace-intro h1,
+.aperture-app[data-theme="light"] .panel-heading h2,
+.aperture-app[data-theme="light"] .metric-value,
+.aperture-app[data-theme="light"] .donut-center strong,
+.aperture-app[data-theme="light"] .holding-name,
+.aperture-app[data-theme="light"] .number-cell,
+.aperture-app[data-theme="light"] .comparison-table tbody th,
+.aperture-app[data-theme="light"] .scenario-text strong,
+.aperture-app[data-theme="light"] .alternative-heading,
+.aperture-app[data-theme="light"] .tradeoff-note strong {
+  color: #222b27;
+}
+
+.aperture-app[data-theme="light"] .metric-card:nth-child(2),
+.aperture-app[data-theme="light"] .metric-card:nth-child(3),
+.aperture-app[data-theme="light"] .metric-card:nth-child(5),
+.aperture-app[data-theme="light"] .var-card,
+.aperture-app[data-theme="light"] .allocation-panel .panel-heading,
+.aperture-app[data-theme="light"] .scenario-panel .panel-heading,
+.aperture-app[data-theme="light"] .performance-panel .panel-heading,
+.aperture-app[data-theme="light"] .comparison-panel .panel-heading {
+  background: #f7f6f1;
+}
+
+.aperture-app[data-theme="light"] .metric-card:nth-child(4),
+.aperture-app[data-theme="light"] .scenario-result {
+  background: #f8f1e5;
+}
+
+.aperture-app[data-theme="light"] .var-card::before {
+  background: #315b49;
+}
+
+.aperture-app[data-theme="light"] .top-nav a.active,
+.aperture-app[data-theme="light"] .eyebrow,
+.aperture-app[data-theme="light"] .text-button,
+.aperture-app[data-theme="light"] .overview-allocation-teaser a,
+.aperture-app[data-theme="light"] .overview-compare-teaser a,
+.aperture-app[data-theme="light"] .app-footer a,
+.aperture-app[data-theme="light"] .comparison-table td:last-child {
+  color: #315b49;
+}
+
+.aperture-app[data-theme="light"] .app-header .top-nav a.active,
+.aperture-app[data-theme="light"] .app-header .top-nav a:hover {
+  color: #fff;
+}
+
+.aperture-app[data-theme="light"] .app-header .top-nav a.active::after {
+  background: #b8cbbd;
+}
+
+.aperture-app[data-theme="light"] .theme-toggle,
+.aperture-app[data-theme="light"] .reset-view,
+.aperture-app[data-theme="light"] .quiet-action,
+.aperture-app[data-theme="light"] .text-button {
+  border-color: #dfe2d9;
+  background: #fff;
+  color: #315b49;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
+}
+
+.aperture-app[data-theme="light"] .theme-toggle:hover,
+.aperture-app[data-theme="light"] .reset-view:hover,
+.aperture-app[data-theme="light"] .quiet-action:hover,
+.aperture-app[data-theme="light"] .text-button:hover {
+  border-color: #315b49;
+  background: #edf2ed;
+  color: #284a3b;
+}
+
+.aperture-app[data-theme="light"] .scenario-choice,
+.aperture-app[data-theme="light"] .custom-controls,
+.aperture-app[data-theme="light"] .scenario-idle,
+.aperture-app[data-theme="light"] .weight-field,
+.aperture-app[data-theme="light"] .weight-field input,
+.aperture-app[data-theme="light"] .objective-controls select,
+.aperture-app[data-theme="light"] .objective-controls input,
+.aperture-app[data-theme="light"] .alternative-weights label,
+.aperture-app[data-theme="light"] .alternative-weights input {
+  border-color: #dfe2d9;
+  background: #fff;
+  color: #222b27;
+}
+
+.aperture-app[data-theme="light"] .scenario-choice:hover {
+  border-color: #9caf9f;
+  background: #f8faf7;
+}
+
+.aperture-app[data-theme="light"] .scenario-choice.selected {
+  border-color: #a9b9aa;
+  background: #edf2ed;
+  box-shadow: inset 2px 0 #315b49;
+}
+
+.aperture-app[data-theme="light"] .scenario-choice.selected .scenario-radio,
+.aperture-app[data-theme="light"] .scenario-choice.selected .scenario-radio::after {
+  border-color: #315b49;
+  background: #315b49;
+}
+
+.aperture-app[data-theme="light"] .performance-chart {
+  border-radius: 6px;
+  background: #fff;
+}
+
+.aperture-app[data-theme="light"] .history-path,
+.aperture-app[data-theme="light"] .history-point {
+  stroke: #315b49;
+}
+
+.aperture-app[data-theme="light"] .chart-gridline,
+.aperture-app[data-theme="light"] .zero-line {
+  stroke: #dfe2d9;
+}
+
+.aperture-app[data-theme="light"] .holding-table th,
+.aperture-app[data-theme="light"] .comparison-table thead th {
+  background: #f7f6f1;
+  color: #68736d;
+}
+
+.aperture-app[data-theme="light"] .holding-table tbody tr:hover {
+  background: #f8faf7;
+}
+
+.aperture-app[data-theme="light"] .holding-table td,
+.aperture-app[data-theme="light"] .comparison-table td {
+  color: #222b27;
+}
+
+.aperture-app[data-theme="light"] .holding-table .liquidity-pill.high {
+  background: #eaf3ed;
+  color: #287a52;
+}
+
+.aperture-app[data-theme="light"] .holding-table .liquidity-pill.medium {
+  background: #f8f1e5;
+  color: #a96816;
+}
+
+.aperture-app[data-theme="light"] .holding-table .liquidity-pill.low {
+  background: #f8ece9;
+  color: #b54743;
+}
+
+.aperture-app[data-theme="light"] .positive-value {
+  color: #287a52;
+}
+
+.aperture-app[data-theme="light"] .negative-value,
+.aperture-app[data-theme="light"] .scenario-path,
+.aperture-app[data-theme="light"] .scenario-point,
+.aperture-app[data-theme="light"] .simulated-line {
+  color: #b54743;
+  stroke: #b54743;
+  border-color: #b54743;
+}
+
+.aperture-app[data-theme="light"] .drawdown-path {
+  fill: rgba(181, 71, 67, 0.12);
+  stroke: #b54743;
+}
+
+.aperture-app[data-theme="light"] .scenario-result {
+  border-color: #e7dcc8;
+}
+
+.aperture-app[data-theme="light"] .warning-count,
+.aperture-app[data-theme="light"] .diagnostic-item.watch,
+.aperture-app[data-theme="light"] .inline-notice,
+.aperture-app[data-theme="light"] .allocation-alert,
+.aperture-app[data-theme="light"] .liquidity-pill.medium {
+  border-color: #e9d8b8;
+  background: #f8f1e5;
+  color: #a96816;
+}
+
+.aperture-app[data-theme="light"] .diagnostic-item.clear-item,
+.aperture-app[data-theme="light"] .warning-count.clear,
+.aperture-app[data-theme="light"] .liquidity-pill.high {
+  border-color: #d8e6d9;
+  background: #eaf3ed;
+  color: #287a52;
+}
+
+.aperture-app[data-theme="light"] .diagnostic-item.clear-item p,
+.aperture-app[data-theme="light"] .diagnostic-item.clear-item strong {
+  color: #287a52;
+}
+
+.aperture-app[data-theme="light"] .liquidity-pill.low {
+  border-color: #ead3cf;
+  background: #f8ece9;
+  color: #b54743;
+}
+
+.aperture-app[data-theme="light"] input:focus-visible,
+.aperture-app[data-theme="light"] select:focus-visible,
+.aperture-app[data-theme="light"] button:focus-visible,
+.aperture-app[data-theme="light"] a:focus-visible {
+  outline-color: rgba(49, 91, 73, 0.42);
+}
+
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .aperture-app[data-theme="light"] .panel:hover {
+    border-color: #cbd5ca;
+    box-shadow: 0 10px 26px rgba(34, 43, 39, 0.075);
+    transform: translateY(-2px);
+  }
+}
+
+  .metric-label {
+    flex-wrap: wrap;
+  }
+
+  .metric-state {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 2px 5px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .metric-card[class*="metric-tone-"] {
+    --metric-tone-bg: #fff;
+    --metric-tone-border: #dfe2d9;
+    --metric-tone-accent: #b78643;
+    --metric-tone-text: #715322;
+    border-color: var(--metric-tone-border);
+    background-color: var(--metric-tone-bg);
+    transition: background-color 200ms ease, border-color 200ms ease;
+  }
+
+  .aperture-app[data-theme="light"] .metric-strip .metric-card.metric-tone-safe-1 {
+    --metric-tone-bg: #4caf70;
+    --metric-tone-border: #27834c;
+    --metric-tone-accent: #176638;
+    --metric-tone-text: #0a3520;
+  }
+
+  .aperture-app[data-theme="light"] .metric-strip .metric-card.metric-tone-safe-2 {
+    --metric-tone-bg: #27834c;
+    --metric-tone-border: #176638;
+    --metric-tone-accent: #104d2c;
+    --metric-tone-text: #fff;
+  }
+
+  .aperture-app[data-theme="light"] .metric-strip .metric-card.metric-tone-watch-1 {
+    --metric-tone-bg: #ffd54f;
+    --metric-tone-border: #f9bd24;
+    --metric-tone-accent: #d99b0b;
+    --metric-tone-text: #443200;
+  }
+
+  .aperture-app[data-theme="light"] .metric-strip .metric-card.metric-tone-watch-2 {
+    --metric-tone-bg: #d99b0b;
+    --metric-tone-border: #aa7608;
+    --metric-tone-accent: #795308;
+    --metric-tone-text: #302200;
+  }
+
+  .aperture-app[data-theme="light"] .metric-strip .metric-card.metric-tone-danger-1 {
+    --metric-tone-bg: #e87575;
+    --metric-tone-border: #d94848;
+    --metric-tone-accent: #b92d35;
+    --metric-tone-text: #491318;
+  }
+
+  .aperture-app[data-theme="light"] .metric-strip .metric-card.metric-tone-danger-2 {
+    --metric-tone-bg: #92232c;
+    --metric-tone-border: #6b1a22;
+    --metric-tone-accent: #b92d35;
+    --metric-tone-text: #fff;
+  }
+
+  .aperture-app[data-theme="light"] .metric-strip .metric-card.metric-tone-neutral {
+    --metric-tone-bg: #4caf70;
+    --metric-tone-border: #27834c;
+    --metric-tone-accent: #176638;
+    --metric-tone-text: #0a3520;
+  }
+
+  .aperture-app[data-theme="light"] .metric-card[class*="metric-tone-"] .metric-label,
+  .aperture-app[data-theme="light"] .metric-card[class*="metric-tone-"] .metric-value,
+  .aperture-app[data-theme="light"] .metric-card[class*="metric-tone-"] .metric-foot {
+    color: var(--metric-tone-text);
+  }
+
+  .aperture-app[data-theme="light"] .metric-card[class*="metric-tone-"] .metric-value.negative-value {
+    color: var(--metric-tone-text) !important;
+  }
+
+  .metric-card[class*="metric-tone-"] .metric-state {
+    border-color: var(--metric-tone-border);
+    background: rgba(255, 255, 255, 0.32);
+    color: var(--metric-tone-text);
+  }
+
+  .metric-card[class*="metric-tone-"] .metric-dot {
+    background: var(--metric-tone-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--metric-tone-accent) 15%, transparent);
+  }
+
+  .aperture-app[data-theme="dark"] .metric-strip .metric-card.metric-tone-safe-1 {
+    --metric-tone-bg: #4caf70;
+    --metric-tone-border: #27834c;
+    --metric-tone-accent: #176638;
+    --metric-tone-text: #0a3520;
+  }
+
+  .aperture-app[data-theme="dark"] .metric-strip .metric-card.metric-tone-safe-2 {
+    --metric-tone-bg: #27834c;
+    --metric-tone-border: #176638;
+    --metric-tone-accent: #104d2c;
+    --metric-tone-text: #fff;
+  }
+
+  .aperture-app[data-theme="dark"] .metric-strip .metric-card.metric-tone-watch-1 {
+    --metric-tone-bg: #ffd54f;
+    --metric-tone-border: #f9bd24;
+    --metric-tone-accent: #d99b0b;
+    --metric-tone-text: #443200;
+  }
+
+  .aperture-app[data-theme="dark"] .metric-strip .metric-card.metric-tone-watch-2 {
+    --metric-tone-bg: #d99b0b;
+    --metric-tone-border: #aa7608;
+    --metric-tone-accent: #795308;
+    --metric-tone-text: #302200;
+  }
+
+  .aperture-app[data-theme="dark"] .metric-strip .metric-card.metric-tone-danger-1 {
+    --metric-tone-bg: #e87575;
+    --metric-tone-border: #d94848;
+    --metric-tone-accent: #b92d35;
+    --metric-tone-text: #491318;
+  }
+
+  .aperture-app[data-theme="dark"] .metric-strip .metric-card.metric-tone-danger-2 {
+    --metric-tone-bg: #92232c;
+    --metric-tone-border: #6b1a22;
+    --metric-tone-accent: #b92d35;
+    --metric-tone-text: #fff;
+  }
+
+  .aperture-app[data-theme="dark"] .metric-strip .metric-card.metric-tone-neutral {
+    --metric-tone-bg: #4caf70;
+    --metric-tone-border: #27834c;
+    --metric-tone-accent: #176638;
+    --metric-tone-text: #0a3520;
+  }
+
+  .aperture-app[data-theme="dark"] .metric-card[class*="metric-tone-"] .metric-label,
+  .aperture-app[data-theme="dark"] .metric-card[class*="metric-tone-"] .metric-value,
+  .aperture-app[data-theme="dark"] .metric-card[class*="metric-tone-"] .metric-foot {
+    color: var(--metric-tone-text);
+  }
+
+  .aperture-app[data-theme="dark"] .metric-card[class*="metric-tone-"] .metric-value.negative-value {
+    color: var(--metric-tone-text) !important;
+  }
+
+  .aperture-app[data-theme="light"] .metric-strip .metric-card[class*="metric-tone-"],
+  .aperture-app[data-theme="dark"] .metric-strip .metric-card[class*="metric-tone-"] {
+    border-color: var(--metric-tone-border);
+    background: var(--metric-tone-bg);
+  }
+
+  .aperture-app[data-theme="dark"] .metric-card[class*="metric-tone-"] .metric-state {
+    border-color: var(--metric-tone-border);
+    background: rgba(0, 0, 0, 0.12);
+    color: var(--metric-tone-text);
+  }

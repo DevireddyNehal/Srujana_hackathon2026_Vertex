@@ -262,6 +262,39 @@ function Header({
   );
 }
 
+type MetricTone = "safe-1" | "safe-2" | "watch-1" | "watch-2" | "danger-1" | "danger-2";
+
+function riskTone(
+  value: number,
+  thresholds: readonly [number, number, number, number, number],
+): MetricTone {
+  if (value <= thresholds[0]) return "safe-1";
+  if (value <= thresholds[1]) return "safe-2";
+  if (value <= thresholds[2]) return "watch-1";
+  if (value <= thresholds[3]) return "watch-2";
+  if (value <= thresholds[4]) return "danger-1";
+  return "danger-2";
+}
+
+function coverageTone(value: number): MetricTone {
+  if (value >= 85) return "safe-1";
+  if (value >= 70) return "safe-2";
+  if (value >= 50) return "watch-1";
+  if (value >= 30) return "watch-2";
+  if (value >= 15) return "danger-1";
+  return "danger-2";
+}
+
+function riskToneLabel(tone: MetricTone, lowerIsBetter: string, higherIsBetter: string): string {
+  if (tone === "safe-1" || tone === "safe-2") {
+    return lowerIsBetter;
+  }
+  if (tone === "watch-1" || tone === "watch-2") {
+    return "Watch";
+  }
+  return higherIsBetter;
+}
+
 function MetricStrip({
   portfolio,
   weights,
@@ -280,31 +313,48 @@ function MetricStrip({
   const vaRPct = portfolio.marketValue > 0
     ? (metrics.dailyVaR / portfolio.marketValue) * 100
     : 0;
+  const vaRTone = riskTone(vaRPct, [0.5, 1, 1.75, 2.5, 4]);
+  const volatilityTone = riskTone(metrics.annualizedVolatility, [10, 16, 22, 28, 35]);
+  const drawdownTone = riskTone(Math.abs(metrics.maxDrawdown), [2, 5, 10, 18, 30]);
+  const liquidityTone = coverageTone(metrics.liquidWeight);
 
   return (
     <section className="metric-strip" aria-label="Portfolio risk metrics">
-      <article className="metric-card var-card">
-        <div className="metric-label">95% one-day VaR <span className="info-dot" title="Historical loss-tail estimate from a deterministic illustrative 252-day sample. Losses can exceed VaR.">i</span></div>
+      <article className={`metric-card var-card metric-tone-${vaRTone}`}>
+        <div className="metric-label">
+          95% one-day VaR
+          <span className="info-dot" title="Historical loss-tail estimate from a deterministic illustrative 252-day sample. Losses can exceed VaR.">i</span>
+          <span className="metric-state">{riskToneLabel(vaRTone, "Lower", "High")}</span>
+        </div>
         <div className="metric-value" key={`${metrics.dailyVaR}-${currency}`}>{money(metrics.dailyVaR, currency, true)}</div>
         <div className="metric-foot"><span className="metric-dot violet" />Potential daily loss · {formatPercent(vaRPct, 2)} of value</div>
       </article>
-      <article className="metric-card">
-        <div className="metric-label">Market value</div>
+      <article className="metric-card metric-tone-neutral">
+        <div className="metric-label">Market value <span className="metric-state">Portfolio</span></div>
         <div className="metric-value" key={`${portfolio.marketValue}-${currency}`}>{money(portfolio.marketValue, currency, true)}</div>
         <div className="metric-foot">Current portfolio · {holdings.length} holdings</div>
       </article>
-      <article className="metric-card">
-        <div className="metric-label">Annualized volatility</div>
+      <article className={`metric-card metric-tone-${volatilityTone}`}>
+        <div className="metric-label">
+          Annualized volatility
+          <span className="metric-state">{riskToneLabel(volatilityTone, "Lower", "High")}</span>
+        </div>
         <div className="metric-value" key={metrics.annualizedVolatility}>{formatPercent(metrics.annualizedVolatility)}</div>
         <div className="metric-foot">Daily sample · √252 annualization</div>
       </article>
-      <article className="metric-card">
-        <div className="metric-label">Max historical drawdown</div>
+      <article className={`metric-card metric-tone-${drawdownTone}`}>
+        <div className="metric-label">
+          Max historical drawdown
+          <span className="metric-state">{riskToneLabel(drawdownTone, "Shallow", "Severe")}</span>
+        </div>
         <div className="metric-value negative-value" key={metrics.maxDrawdown}>{formatPercent(metrics.maxDrawdown)}</div>
         <div className="metric-foot">Peak-to-trough · trailing {period} months</div>
       </article>
-      <article className="metric-card">
-        <div className="metric-label">Liquid asset coverage</div>
+      <article className={`metric-card metric-tone-${liquidityTone}`}>
+        <div className="metric-label">
+          Liquid asset coverage
+          <span className="metric-state">{riskToneLabel(liquidityTone, "Strong", "Low")}</span>
+        </div>
         <div className="metric-value" key={metrics.liquidWeight}>{formatPercent(metrics.liquidWeight)}</div>
         <div className="metric-foot">{money(metrics.liquidValue, currency, true)} classified high liquidity</div>
       </article>
@@ -974,7 +1024,7 @@ export default function Dashboard() {
   useEffect(() => {
     const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (themeColor) {
-      themeColor.content = darkMode ? "#171620" : "#F5F8F5";
+      themeColor.content = darkMode ? "#151A1D" : "#F4F2EB";
     }
   }, [darkMode]);
 
