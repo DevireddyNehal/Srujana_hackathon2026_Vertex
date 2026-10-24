@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Butterfly Effect: Financial Contagion Simulation Engine</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-border: #1f293d;
+      --card-hover: #1e293b;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent-shock: #ef4444;
+      --accent-fo: #f59e0b;
+      --accent-so: #38bdf8;
+      --accent-holding: #10b981;
+      --accent-negative: #f43f5e;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #ef4444, #f59e0b, #38bdf8);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+    }
+
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .controls-bar {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+
+    .slider-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: #141c2e;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+    }
+
+    .slider-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .slider-val {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #38bdf8;
+      min-width: 45px;
+    }
+
+    input[type=range] {
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+
+    .scenario-select {
+      background: #1e293b;
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .scenario-select:hover, .scenario-select:focus {
+      border-color: #38bdf8;
+    }
+
+    .main-container {
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      flex: 1;
+      overflow: hidden;
+      height: calc(100vh - 75px);
+    }
+
+    .graph-panel {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--card-border);
+    }
+
+    .stage-tabs {
+      display: flex;
+      background: rgba(17, 24, 39, 0.6);
+      border-bottom: 1px solid var(--card-border);
+      padding: 0.5rem 1.5rem;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .stage-step {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      background: #1e293b;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .stage-step.active {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+    }
+
+    .stage-badge {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #334155;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+    }
+
+    .stage-step.active .stage-badge {
+      background: #38bdf8;
+      color: #090d16;
+    }
+
+    .canvas-container {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at 50% 50%, #151e32 0%, #090d16 100%);
+      overflow: auto;
+    }
+
+    svg#flow-svg {
+      width: 100%;
+      height: 100%;
+      min-width: 950px;
+      min-height: 620px;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--card-bg);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 1.5rem;
+      gap: 1.25rem;
+    }
+
+    .summary-card {
+      background: linear-gradient(145deg, #1e293b, #0f172a);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    .summary-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+
+    .summary-val {
+      font-size: 1.85rem;
+      font-weight: 800;
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .summary-val.negative { color: var(--accent-negative); }
+    .summary-val.positive { color: var(--accent-holding); }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.6rem;
+      padding-top: 0.6rem;
+      border-top: 1px solid #1f293d;
+      font-size: 0.85rem;
+    }
+
+    .metric-row span:last-child {
+      font-weight: 600;
+    }
+
+    .inspector-card {
+      background: #141c2e;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .inspector-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .inspector-badge {
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-shock { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .badge-first_order { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .badge-second_order { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+    .badge-asset { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+
+    .inspector-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .path-tracer {
+      background: #0a0f1a;
+      border: 1px solid #1f293d;
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+      font-size: 0.75rem;
+      color: #94a3b8;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .path-step {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .path-arrow {
+      color: #38bdf8;
+      font-weight: bold;
+    }
+
+    .inoculation-card {
+      background: linear-gradient(145deg, #0d281e, #0a1b15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 10px;
+      padding: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .inoculation-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #10b981;
+    }
+
+    .inoculation-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      background: rgba(0,0,0,0.25);
+      padding: 0.6rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+
+    .inoculation-stats div span {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.7rem;
+    }
+
+    .inoculation-stats div strong {
+      color: #34d399;
+      font-size: 0.95rem;
+    }
+
+    .rebalance-pill {
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      line-height: 1.4;
+    }
+
+    .holdings-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .holding-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.6rem 0.8rem;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .holding-item:hover {
+      border-color: #38bdf8;
+    }
+
+    .holding-name { font-weight: 600; }
+    .holding-sector { font-size: 0.75rem; color: var(--text-muted); }
+    .holding-impact { text-align: right; font-weight: 700; }
+    .holding-impact.loss { color: var(--accent-negative); }
+    .holding-impact.gain { color: var(--accent-holding); }
+
+    /* SVG Elements */
+    .node-group { cursor: pointer; transition: transform 0.2s; }
+    .node-group:hover { transform: scale(1.03); }
+    .node-rect { stroke-width: 1.5; rx: 8; transition: all 0.2s; }
+    .node-title { font-size: 11.5px; font-weight: 600; fill: #f1f5f9; pointer-events: none; }
+    .node-subtitle { font-size: 10px; fill: #94a3b8; pointer-events: none; }
+
+    .edge-path {
+      fill: none;
+      stroke: #334155;
+      stroke-width: 1.8;
+      stroke-dasharray: 4,4;
+      animation: dash 25s linear infinite;
+    }
+
+    .edge-path.highlight {
+      stroke: #38bdf8;
+      stroke-width: 2.2;
+      stroke-dasharray: none;
+    }
+
+    @keyframes dash {
+      to { stroke-dashoffset: -1000; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🦋</div>
+      <div>
+        <div class="brand-title">The Butterfly Effect</div>
+        <div class="brand-subtitle">Financial Contagion Simulation Engine • F-06</div>
+      </div>
+    </div>
+
+    <div class="controls-bar">
+      <div class="slider-group">
+        <span class="slider-label">Shock Magnitude:</span>
+        <input type="range" id="shockSlider" min="5" max="100" step="5" value="20" oninput="onSliderChange(this.value)">
+        <span class="slider-val" id="sliderValDisplay">+20.0%</span>
+      </div>
+
+      <select id="scenarioSelect" class="scenario-select" onchange="onScenarioSelect(this.value)">
+        <option value="oil_supply_disruption">🛢️ Global Oil Supply Disruption</option>
+        <option value="rbi_repo_tightening">🏦 Aggressive RBI Repo Rate Hike</option>
+        <option value="us_tech_spending_freeze">💻 US Enterprise Tech Spending Freeze</option>
+      </select>
+    </div>
+  </header>
+
+  <div class="main-container">
+    <div class="graph-panel">
+      <div class="stage-tabs">
+        <div class="stage-step active" id="tab-all" onclick="filterStage('all')">
+          <div class="stage-badge">●</div>
+          Full Contagion Map
+        </div>
+        <div class="stage-step" id="tab-0" onclick="filterStage(0)">
+          <div class="stage-badge">0</div>
+          Initial Shock
+        </div>
+        <div class="stage-step" id="tab-1" onclick="filterStage(1)">
+          <div class="stage-badge">1</div>
+          1st Order Macro
+        </div>
+        <div class="stage-step" id="tab-2" onclick="filterStage(2)">
+          <div class="stage-badge">2</div>
+          2nd Order Industry
+        </div>
+        <div class="stage-step" id="tab-3" onclick="filterStage(3)">
+          <div class="stage-badge">3</div>
+          Portfolio Exposure
+        </div>
+      </div>
+
+      <div class="canvas-container">
+        <svg id="flow-svg"></svg>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="summary-card">
+        <div class="summary-label">Hypothetical Portfolio Impact</div>
+        <div class="summary-val negative" id="portfolioImpactVal">-₹6,000 (-0.6%)</div>
+        <div class="metric-row">
+          <span>Initial Portfolio Value:</span>
+          <span id="initialVal">₹10,00,000</span>
+        </div>
+        <div class="metric-row">
+          <span>Stressed Portfolio Value:</span>
+          <span id="stressedVal">₹9,94,000</span>
+        </div>
+        <div class="metric-row">
+          <span>Formula Engine:</span>
+          <span style="font-size: 0.75rem; color: #38bdf8;">Rp = Σ(wi · ri) [Zero Double Count]</span>
+        </div>
+      </div>
+
+      <!-- Contagion Inoculation Strategy -->
+      <div class="inoculation-card" id="inoculationCard">
+        <div class="inoculation-header">
+          <span>🛡️</span>
+          <span>Contagion Inoculation (Hedge)</span>
+        </div>
+        <div class="inoculation-stats">
+          <div>
+            <span>Drawdown Saved:</span>
+            <strong id="savedInrDisplay">₹71,920</strong>
+          </div>
+          <div>
+            <span>Post-Hedge Impact:</span>
+            <strong id="postHedgePctDisplay">-4.4%</strong>
+          </div>
+        </div>
+        <div class="rebalance-pill" id="rebalanceDetails">
+          Trim concentration in primary drag asset and allocate to defensive liquid cash / bullion ETF.
+        </div>
+      </div>
+
+      <!-- Dynamic Node & Path Inspector -->
+      <div class="inspector-card" id="inspectorCard">
+        <div class="inspector-title">
+          <span id="inspLabel">Select any node to inspect</span>
+          <span class="inspector-badge badge-shock" id="inspBadge" style="display:none;">Shock</span>
+        </div>
+        <div class="inspector-desc" id="inspDesc">
+          Click any macro factor, commodity, sector, or equity holding in the dependency graph to inspect its multi-hop causal transmission pathway.
+        </div>
+
+        <div id="pathTracerBox" class="path-tracer" style="display:none;">
+          <strong style="color: #f1f5f9; font-size: 0.75rem;">Causal Transmission Chain:</strong>
+          <div id="pathTraceSteps"></div>
+        </div>
+      </div>
+
+      <!-- Single-Counted Holdings Waterfall -->
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
+          Single-Counted Holdings Exposure
+        </div>
+        <div class="holdings-list" id="holdingsList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SCENARIOS = {
+      oil_supply_disruption: {
+        title: "Global Oil Supply Disruption",
+        defaultMag: 20,
+        min: 5, max: 100, step: 5, unit: "%",
+        baseHoldings: [
+          { ticker: "TCS.NS", name: "TCS", sector: "IT", amount: 400000, baseBeta: 0.10 },
+          { ticker: "INFY.NS", name: "Infosys", sector: "IT", amount: 350000, baseBeta: 0.10 },
+          { ticker: "HDFCBANK.NS", name: "HDFC Bank", sector: "Banking", amount: 150000, baseBeta: -0.20 },
+          { ticker: "REALTY_LOCKED", name: "Commercial REIT", sector: "Real Estate", amount: 100000, baseBeta: -0.15 }
+        ],
+        nodes: [
+          { id: "shock_oil", col: 0, label: "Global Crude Oil Spike", sub: "Brent Price Impulse", cat: "shock", desc: "Geopolitical conflict in shipping chokepoint contracts global supply." },
+          { id: "fo_fuel", col: 1, label: "Transport & Jet Fuel", sub: "+14% ATF/Diesel", cat: "first_order", desc: "Pass-through of crude into aviation turbine fuel and commercial freight." },
+          { id: "fo_cad", col: 1, label: "India Current Account", sub: "Trade Gap Widening", cat: "first_order", desc: "Elevated oil import bill increases dollar demand in foreign exchange markets." },
+          { id: "so_airlines", col: 2, label: "Airline EBITDAR Margins", sub: "Fuel Cost Compression", cat: "second_order", desc: "Jet fuel represents 40% of airline OPEX, crushing operating profitability." },
+          { id: "so_paints", col: 2, label: "Paint & Chemical COGS", sub: "Solvent Input Inflation", cat: "second_order", desc: "Petrochemical derivatives represent ~50% of architectural paint manufacturing costs." },
+          { id: "so_inr", col: 2, label: "INR Depreciation", sub: "USD/INR +3.5%", cat: "second_order", desc: "Forex trade deficit pressure weakens Rupee against the Dollar." },
+          { id: "so_gold", col: 2, label: "Safe-Haven Rotation", sub: "+7% Gold Demand", cat: "second_order", desc: "Institutional capital allocates to bullion as a geopolitical hedge." },
+          { id: "h_it", col: 3, label: "Portfolio: TCS & INFY", sub: "Export USD Translation Buffer", cat: "asset", desc: "Rupee depreciation boosts INR revenues translated from offshore USD contracts." },
+          { id: "h_bank", col: 3, label: "Portfolio: HDFC Bank", sub: "Inflation Rate Squeeze", cat: "asset", desc: "High fuel inflation delays rate easing, elevating funding costs." },
+          { id: "h_reit", col: 3, label: "Portfolio: Real Estate", sub: "Raw Material Inflation", cat: "asset", desc: "Cement, steel, and fuel inflation elevates development replacement cost." }
+        ],
+        edges: [
+          { src: "shock_oil", tgt: "fo_fuel", sens: 0.70, rel: "Refined Pass-Through" },
+          { src: "shock_oil", tgt: "fo_cad", sens: 0.50, rel: "Import Bill Spike" },
+          { src: "shock_oil", tgt: "so_gold", sens: 0.35, rel: "Safe Haven Flow" },
+          { src: "fo_fuel", tgt: "so_airlines", sens: -0.65, rel: "OPEX Margin Squeeze" },
+          { src: "fo_fuel", tgt: "so_paints", sens: -0.40, rel: "Raw Material COGS" },
+          { src: "fo_cad", tgt: "so_inr", sens: -0.22, rel: "Currency Depreciation" },
+          { src: "so_inr", tgt: "h_it", sens: 0.40, rel: "USD Realization Cushion" },
+          { src: "fo_cad", tgt: "h_bank", sens: -0.20, rel: "Credit Spread Friction" },
+          { src: "fo_fuel", tgt: "h_reit", sens: -0.15, rel: "Construction Inflation" }
+        ],
+        hedgeAsset: "Nippon India Gold ETF (GOLDBEES)",
+        hedgeRationale: "Gold exhibits +0.35 beta during geopolitical commodity crises, hedging import inflation."
+      },
+      rbi_repo_tightening: {
+        title: "Aggressive RBI Repo Rate Tightening",
+        defaultMag: 75,
+        min: 25, max: 300, step: 25, unit: " bps",
+        baseHoldings: [
+          { ticker: "TCS.NS", name: "TCS", sector: "IT", amount: 400000, baseBeta: -0.06 },
+          { ticker: "INFY.NS", name: "Infosys", sector: "IT", amount: 350000, baseBeta: -0.06 },
+          { ticker: "HDFCBANK.NS", name: "HDFC Bank", sector: "Banking", amount: 150000, baseBeta: -0.05 },
+          { ticker: "REALTY_LOCKED", name: "Commercial REIT", sector: "Real Estate", amount: 100000, baseBeta: -0.16 }
+        ],
+        nodes: [
+          { id: "shock_rates", col: 0, label: "RBI Rate Shock", sub: "Surprise Repo Hike", cat: "shock", desc: "Central bank raises repo rate unexpectedly to curb sticky domestic core inflation." },
+          { id: "fo_yields", col: 1, label: "10Y Sovereign Yields", sub: "+45 bps Curve Shift", cat: "first_order", desc: "Benchmark sovereign G-Sec curve resets higher across all tenors." },
+          { id: "fo_mclr", col: 1, label: "Floating Lending Rates", sub: "MCLR/EBLR Reset", cat: "first_order", desc: "Commercial banks immediately pass rate hikes into floating loan portfolios." },
+          { id: "so_dcf", col: 2, label: "Growth DCF Multiple", sub: "P/E Ratio Contraction", cat: "second_order", desc: "Higher risk-free discount rates reduce the present value of future tech cash flows." },
+          { id: "so_realty", col: 2, label: "Mortgage Demand", sub: "Cap Rate Expansion", cat: "second_order", desc: "Elevated borrowing costs dampen housing absorption and commercial yields." },
+          { id: "so_treasury", col: 2, label: "Bank Treasury Books", sub: "MTM Bond Valuation Drag", cat: "second_order", desc: "Fixed-rate debt holdings suffer instantaneous mark-to-market depreciation." },
+          { id: "h_it", col: 3, label: "Portfolio: TCS & INFY", sub: "DCF Multiple De-rating", cat: "asset", desc: "High-multiple growth equities reprice to higher benchmark yields." },
+          { id: "h_bank", col: 3, label: "Portfolio: HDFC Bank", sub: "Treasury MTM Drag", cat: "asset", desc: "MTM markdown on bond portfolio and deposit competition squeezes margins." },
+          { id: "h_reit", col: 3, label: "Portfolio: Real Estate", sub: "Cap Rate Discounting", cat: "asset", desc: "Heavy direct hit on locked real estate due to cap-rate expansion." }
+        ],
+        edges: [
+          { src: "shock_rates", tgt: "fo_yields", sens: 0.60, rel: "Yield Shift" },
+          { src: "shock_rates", tgt: "fo_mclr", sens: 0.75, rel: "Lending Pass-Through" },
+          { src: "fo_yields", tgt: "so_dcf", sens: -0.07, rel: "Discount Rate Increase" },
+          { src: "fo_yields", tgt: "so_treasury", sens: -0.05, rel: "Bond Price Drag" },
+          { src: "fo_mclr", tgt: "so_realty", sens: -0.16, rel: "Financing Cost Spike" },
+          { src: "so_dcf", tgt: "h_it", sens: 0.80, rel: "Multiple Compression" },
+          { src: "so_treasury", tgt: "h_bank", sens: 0.75, rel: "Investment Drag" },
+          { src: "so_realty", tgt: "h_reit", sens: 0.95, rel: "NAV Markdown" }
+        ],
+        hedgeAsset: "Nippon India Liquid ETF (LIQUIDBEES)",
+        hedgeRationale: "Zero-duration overnight liquid debt captures expanding yields with zero capital loss."
+      },
+      us_tech_spending_freeze: {
+        title: "US Enterprise Tech Spending Freeze",
+        defaultMag: -25,
+        min: -50, max: -5, step: 5, unit: "%",
+        baseHoldings: [
+          { ticker: "TCS.NS", name: "TCS", sector: "IT", amount: 400000, baseBeta: 0.85 },
+          { ticker: "INFY.NS", name: "Infosys", sector: "IT", amount: 350000, baseBeta: 0.85 },
+          { ticker: "HDFCBANK.NS", name: "HDFC Bank", sector: "Banking", amount: 150000, baseBeta: 0.08 },
+          { ticker: "REALTY_LOCKED", name: "Commercial REIT", sector: "Real Estate", amount: 100000, baseBeta: 0.04 }
+        ],
+        nodes: [
+          { id: "shock_tech", col: 0, label: "US Tech Budget Freeze", sub: "-25% Discretionary Spend", cat: "shock", desc: "Fortune 500 corporations cut discretionary software consulting budgets." },
+          { id: "fo_deals", col: 1, label: "Deal Closure Velocity", sub: "Contract Cycles Extend", cat: "first_order", desc: "Contract approval layers expand; transformation deals paused." },
+          { id: "fo_bench", col: 1, label: "Talent Bench Overhead", sub: "Utilization Falls to 76%", cat: "first_order", desc: "Fixed engineering payroll cannot be reduced instantaneously, dragging gross margins." },
+          { id: "so_margins", col: 2, label: "IT Services EBIT Margins", sub: "-300 bps Margin Drop", cat: "second_order", desc: "Fixed payroll overhead with stalling top-line contract billings compresses margins." },
+          { id: "so_guidance", col: 2, label: "Annual CC Revenue Guidance", sub: "Consensus Downgrades", cat: "second_order", desc: "Management teams lower constant-currency revenue forecasts." },
+          { id: "h_it", col: 3, label: "Portfolio: TCS & INFY", sub: "Severe Concentrated Drawdown", cat: "asset", desc: "75% portfolio concentration in IT absorbs catastrophic guidance downgrade." },
+          { id: "h_bank", col: 3, label: "Portfolio: HDFC Bank", sub: "Secondary Market Ripple", cat: "asset", desc: "Mild secondary domestic sentiment spillover." },
+          { id: "h_reit", col: 3, label: "Portfolio: Real Estate", sub: "Insulated Domestic Asset", cat: "asset", desc: "Negligible direct link to offshore software engineering spend." }
+        ],
+        edges: [
+          { src: "shock_tech", tgt: "fo_deals", sens: 0.80, rel: "Pipeline Freeze" },
+          { src: "shock_tech", tgt: "fo_bench", sens: 0.60, rel: "Billability Drop" },
+          { src: "fo_deals", tgt: "so_margins", sens: 0.65, rel: "Operating Leverage Reversal" },
+          { src: "fo_bench", tgt: "so_margins", sens: 0.40, rel: "Unbilled Overhead Drag" },
+          { src: "fo_deals", tgt: "so_guidance", sens: 0.50, rel: "Guidance Cuts" },
+          { src: "so_margins", tgt: "h_it", sens: 0.80, rel: "Margin Compression Drag" },
+          { src: "so_guidance", tgt: "h_it", sens: 0.60, rel: "Guidance Downgrade De-rating" },
+          { src: "so_guidance", tgt: "h_bank", sens: 0.10, rel: "Sentiment Spillover" },
+          { src: "so_guidance", tgt: "h_reit", sens: 0.05, rel: "Macro Ripple" }
+        ],
+        hedgeAsset: "Defensive Liquid Debt / Cash Buffer",
+        hedgeRationale: "Capital preservation buffer neutralizes portfolio equity concentration drawdown."
+      }
+    };
+
+    let currentKey = "oil_supply_disruption";
+    let currentMag = 20;
+    let activeFilter = "all";
+
+    function onScenarioSelect(key) {
+      currentKey = key;
+      const s = SCENARIOS[key];
+      currentMag = s.defaultMag;
+
+      const slider = document.getElementById("shockSlider");
+      slider.min = s.min;
+      slider.max = s.max;
+      slider.step = s.step;
+      slider.value = s.defaultMag;
+
+      document.getElementById("sliderValDisplay").textContent = `${s.defaultMag > 0 ? '+' : ''}${s.defaultMag}${s.unit}`;
+      recompute();
+    }
+
+    function onSliderChange(val) {
+      currentMag = parseFloat(val);
+      const s = SCENARIOS[currentKey];
+      document.getElementById("sliderValDisplay").textContent = `${currentMag > 0 ? '+' : ''}${currentMag}${s.unit}`;
+      recompute();
+    }
+
+    function filterStage(stg) {
+      activeFilter = stg;
+      document.querySelectorAll(".stage-step").forEach(el => el.classList.remove("active"));
+      if (stg === "all") document.getElementById("tab-all").classList.add("active");
+      else document.getElementById(`tab-${stg}`).classList.add("active");
+      renderGraph();
+    }
+
+    function recompute() {
+      const s = SCENARIOS[currentKey];
+      let totalInit = 0;
+      let totalLoss = 0;
+
+      const updatedHoldings = s.baseHoldings.map(h => {
+        totalInit += h.amount;
+        let r_i = 0;
+        if (currentKey === "oil_supply_disruption") {
+          if (h.sector === "IT") r_i = currentMag * 0.10;
+          else if (h.sector === "Banking") r_i = currentMag * -0.20;
+          else if (h.sector === "Real Estate") r_i = currentMag * -0.15;
+        } else if (currentKey === "rbi_repo_tightening") {
+          // normalized: 75 bps -> ~ -5% to -12%
+          if (h.sector === "IT") r_i = (currentMag / 75.0) * -5.0;
+          else if (h.sector === "Banking") r_i = (currentMag / 75.0) * -4.0;
+          else if (h.sector === "Real Estate") r_i = (currentMag / 75.0) * -12.0;
+        } else {
+          // US tech freeze: magnitude is negative
+          if (h.sector === "IT") r_i = (currentMag / -25.0) * -21.2;
+          else if (h.sector === "Banking") r_i = (currentMag / -25.0) * -2.0;
+          else if (h.sector === "Real Estate") r_i = (currentMag / -25.0) * -1.0;
+        }
+
+        const impactInr = Math.round(h.amount * (r_i / 100.0));
+        totalLoss += impactInr;
+
+        return {
+          ...h,
+          returnPct: r_i,
+          impactInr: impactInr
+        };
+      });
+
+      // Update Summary Card
+      const netPct = ((totalLoss / totalInit) * 100).toFixed(1);
+      const impactElem = document.getElementById("portfolioImpactVal");
+      impactElem.textContent = `${totalLoss < 0 ? '-' : '+'}₹${Math.abs(totalLoss).toLocaleString()} (${netPct > 0 ? '+' : ''}${netPct}%)`;
+      impactElem.className = `summary-val ${totalLoss < 0 ? 'negative' : 'positive'}`;
+      document.getElementById("initialVal").textContent = `₹${totalInit.toLocaleString()}`;
+      document.getElementById("stressedVal").textContent = `₹${(totalInit + totalLoss).toLocaleString()}`;
+
+      // Inoculation details
+      const savedInr = Math.round(Math.abs(totalLoss) * 0.62);
+      const postLossInr = totalLoss + savedInr;
+      const postLossPct = ((postLossInr / totalInit) * 100).toFixed(1);
+
+      document.getElementById("savedInrDisplay").textContent = `₹${savedInr.toLocaleString()}`;
+      document.getElementById("postHedgePctDisplay").textContent = `${postLossPct}%`;
+      document.getElementById("rebalanceDetails").textContent = `Reallocate 20% to ${s.hedgeAsset}. ${s.hedgeRationale}`;
+
+      // Update Holdings list
+      const listElem = document.getElementById("holdingsList");
+      listElem.innerHTML = "";
+      updatedHoldings.forEach(h => {
+        const item = document.createElement("div");
+        item.className = "holding-item";
+        item.onclick = () => inspectHolding(h);
+        item.innerHTML = `
+          <div>
+            <div class="holding-name">${h.name}</div>
+            <div class="holding-sector">${h.sector} • ₹${h.amount.toLocaleString()}</div>
+          </div>
+          <div class="holding-impact ${h.impactInr < 0 ? 'loss' : 'gain'}">
+            ${h.impactInr < 0 ? '-' : '+'}₹${Math.abs(h.impactInr).toLocaleString()}<br>
+            <span style="font-size: 0.75rem;">${h.returnPct > 0 ? '+' : ''}${h.returnPct.toFixed(1)}%</span>
+          </div>
+        `;
+        listElem.appendChild(item);
+      });
+
+      renderGraph();
+    }
+
+    function renderGraph() {
+      const s = SCENARIOS[currentKey];
+      const svg = document.getElementById("flow-svg");
+      svg.innerHTML = "";
+
+      const colX = [50, 280, 520, 760];
+      const colWidth = 195;
+      const nodeHeight = 52;
+
+      const cols = [[], [], [], []];
+      s.nodes.forEach(n => cols[n.col].push(n));
+
+      const nodePos = {};
+      const startY = 50;
+      const spacingY = 85;
+
+      cols.forEach((colNodes, cIdx) => {
+        colNodes.forEach((node, rIdx) => {
+          nodePos[node.id] = {
+            x: colX[cIdx],
+            y: startY + rIdx * spacingY,
+            node: node
+          };
+        });
+      });
+
+      // Draw Edges
+      s.edges.forEach(e => {
+        const p1 = nodePos[e.src];
+        const p2 = nodePos[e.tgt];
+        if (!p1 || !p2) return;
+
+        let isDimmed = false;
+        if (activeFilter !== "all") {
+          const st = parseInt(activeFilter);
+          if (p1.node.col > st && p2.node.col > st) isDimmed = true;
+        }
+
+        const x1 = p1.x + colWidth;
+        const y1 = p1.y + nodeHeight / 2;
+        const x2 = p2.x;
+        const y2 = p2.y + nodeHeight / 2;
+        const dx = (x2 - x1) * 0.5;
+
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
+        path.setAttribute("class", `edge-path ${!isDimmed ? 'highlight' : ''}`);
+        if (isDimmed) path.style.opacity = "0.15";
+        svg.appendChild(path);
+      });
+
+      // Draw Nodes
+      s.nodes.forEach(node => {
+        const pos = nodePos[node.id];
+        let isDimmed = false;
+        if (activeFilter !== "all") {
+          const st = parseInt(activeFilter);
+          if (node.col > st) isDimmed = true;
+        }
+
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.setAttribute("class", "node-group");
+        g.setAttribute("transform", `translate(${pos.x}, ${pos.y})`);
+        if (isDimmed) g.style.opacity = "0.2";
+
+        g.onclick = () => inspectGenericNode(node);
+
+        const colors = {
+          shock: { fill: "#2b1016", stroke: "#ef4444" },
+          first_order: { fill: "#271b0c", stroke: "#f59e0b" },
+          second_order: { fill: "#0c2438", stroke: "#38bdf8" },
+          asset: { fill: "#082820", stroke: "#10b981" }
+        };
+        const c = colors[node.cat] || colors.first_order;
+
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("class", "node-rect");
+        rect.setAttribute("width", colWidth);
+        rect.setAttribute("height", nodeHeight);
+        rect.setAttribute("fill", c.fill);
+        rect.setAttribute("stroke", c.stroke);
+
+        const title = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        title.setAttribute("class", "node-title");
+        title.setAttribute("x", 12);
+        title.setAttribute("y", 22);
+        title.textContent = node.label;
+
+        const sub = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        sub.setAttribute("class", "node-subtitle");
+        sub.setAttribute("x", 12);
+        sub.setAttribute("y", 39);
+        sub.textContent = node.sub;
+
+        g.appendChild(rect);
+        g.appendChild(title);
+        g.appendChild(sub);
+        svg.appendChild(g);
+      });
+    }
+
+    function inspectGenericNode(node) {
+      document.getElementById("inspLabel").textContent = node.label;
+      const badge = document.getElementById("inspBadge");
+      badge.style.display = "inline-block";
+      badge.className = `inspector-badge badge-${node.cat}`;
+      badge.textContent = node.cat.replace("_", " ");
+
+      document.getElementById("inspDesc").textContent = node.desc;
+      document.getElementById("pathTracerBox").style.display = "none";
+    }
+
+    function inspectHolding(h) {
+      document.getElementById("inspLabel").textContent = `${h.name} (${h.ticker})`;
+      const badge = document.getElementById("inspBadge");
+      badge.style.display = "inline-block";
+      badge.className = "inspector-badge badge-asset";
+      badge.textContent = "Holding Exposure";
+
+      document.getElementById("inspDesc").textContent = `Asset in sector ${h.sector} with capital allocation ₹${h.amount.toLocaleString()}. Under current shock magnitude, estimated P&L impact is ${h.impactInr < 0 ? '-' : '+'}₹${Math.abs(h.impactInr).toLocaleString()} (${h.returnPct.toFixed(1)}%).`;
+
+      const tracer = document.getElementById("pathTracerBox");
+      tracer.style.display = "flex";
+      const stepsElem = document.getElementById("pathTraceSteps");
+
+      if (currentKey === "oil_supply_disruption") {
+        stepsElem.innerHTML = `
+          <div class="path-step"><span>Oil Shock (+20%)</span> <span class="path-arrow">→</span> <span>Fuel Cost (+14%)</span></div>
+          <div class="path-step"><span>Import Bill (+10%)</span> <span class="path-arrow">→</span> <span>INR Depreciation (-2.2%)</span></div>
+          <div class="path-step"><span class="path-arrow">↳</span> <strong>${h.name}: ${h.returnPct.toFixed(1)}% (₹${h.impactInr.toLocaleString()})</strong></div>
+        `;
+      } else if (currentKey === "rbi_repo_tightening") {
+        stepsElem.innerHTML = `
+          <div class="path-step"><span>Repo Hike (+75 bps)</span> <span class="path-arrow">→</span> <span>10Y Yields (+45 bps)</span></div>
+          <div class="path-step"><span>DCF Multiple Compression</span> <span class="path-arrow">→</span> <span>Cap-Rate Expansion</span></div>
+          <div class="path-step"><span class="path-arrow">↳</span> <strong>${h.name}: ${h.returnPct.toFixed(1)}% (₹${h.impactInr.toLocaleString()})</strong></div>
+        `;
+      } else {
+        stepsElem.innerHTML = `
+          <div class="path-step"><span>US Tech Freeze (-25%)</span> <span class="path-arrow">→</span> <span>Deal Closures (-20%)</span></div>
+          <div class="path-step"><span>Bench Utilization (-15%)</span> <span class="path-arrow">→</span> <span>EBIT Margins (-19%)</span></div>
+          <div class="path-step"><span class="path-arrow">↳</span> <strong>${h.name}: ${h.returnPct.toFixed(1)}% (₹${h.impactInr.toLocaleString()})</strong></div>
+        `;
+      }
+    }
+
+    window.onload = () => {
+      onScenarioSelect("oil_supply_disruption");
+    };
+  </script>
+</body>
+</html>
