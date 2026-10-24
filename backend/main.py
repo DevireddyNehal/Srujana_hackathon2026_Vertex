@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
@@ -19,17 +20,23 @@ except ImportError:  # pragma: no cover - used when main.py is imported directly
 
 try:
     if __package__:
-        from .engine.quant import run_portfolio_scenario
+        from .engine.quant import run_portfolio_scenario, compute_reverse_stress_test
         from .engine.ai_agent import generate_ai_insights, parse_custom_scenario
+        from .engine.contagion import simulate_butterfly_shock, get_available_contagion_scenarios
     else:  # pragma: no cover - supports running from inside backend/
-        from engine.quant import run_portfolio_scenario
+        from engine.quant import run_portfolio_scenario, compute_reverse_stress_test
         from engine.ai_agent import generate_ai_insights, parse_custom_scenario
+        from engine.contagion import simulate_butterfly_shock, get_available_contagion_scenarios
     _ENGINE_IMPORT_ERROR: str | None = None
 except ImportError as exc:  # allow the API/docs to start before the lead's files exist
     run_portfolio_scenario = None  # type: ignore[assignment]
+    compute_reverse_stress_test = None  # type: ignore[assignment]
     generate_ai_insights = None  # type: ignore[assignment]
     parse_custom_scenario = None  # type: ignore[assignment]
+    simulate_butterfly_shock = None  # type: ignore[assignment]
+    get_available_contagion_scenarios = None  # type: ignore[assignment]
     _ENGINE_IMPORT_ERROR = str(exc)
+
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("srujana_f06.api")
@@ -118,6 +125,24 @@ class AnalysisRequest(StrictModel):
         if len(tickers) != len(set(tickers)):
             raise ValueError("assets must have unique ticker values")
         return self
+
+
+class ContagionSimulationRequest(BaseModel):
+    scenario_id: str = Field(default="oil_supply_disruption")
+    portfolio: dict[str, Any] | list[dict[str, Any]] | None = None
+    assets: list[dict[str, Any]] | None = None
+    custom_magnitude_pct: float | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class ReverseStressTestRequest(BaseModel):
+    portfolio: dict[str, Any] | list[dict[str, Any]] | None = None
+    assets: list[dict[str, Any]] | None = None
+    target_loss_pct: float = Field(default=15.0, gt=0.0, le=100.0)
+
+    model_config = ConfigDict(extra="ignore")
+
 
 
 @asynccontextmanager
@@ -409,8 +434,16 @@ def _build_response(
         "diversification_score_out_of_100": _required_metric(
             metrics, "diversification_score_out_of_100", "diversification_score"
         ),
-        "illiquid_share_pct": _required_metric(metrics, "illiquid_share_pct"),
+        "illiquid_ share_pct": _required_metric(metrics, "illiquid_ share_pct", "illiquid_share_pct"),
+        "illiquid_share_pct": _required_metric(metrics, "illiquid_share_pct", "illiquid_ share_pct"),
     }
+
+    if "cvar_95_pct" in metrics:
+        summary["cvar_95_pct"] = metrics["cvar_95_pct"]
+    if "pain_index" in metrics:
+        summary["pain_index"] = metrics["pain_index"]
+    if "ulcer_index" in metrics:
+        summary["ulcer_index"] = metrics["ulcer_index"]
 
     correlation_matrix = _normalize_correlation_matrix(quant_results.get("correlation_matrix"))
     historical = _normalize_historical_series(quant_results.get("historical_series"))
@@ -506,3 +539,100 @@ def analyze_scenario(request: AnalysisRequest) -> dict[str, Any]:
             status_code=502,
             detail="Scenario analysis failed. Check server logs and confirm the engine output matches CONTRACT.md.",
         ) from exc
+
+
+@app.get("/api/contagion/scenarios")
+def get_contagion_scenarios() -> dict[str, Any]:
+    """Return available real-world shock scenarios for the Butterfly Effect simulator."""
+    if get_available_contagion_scenarios is None:
+        raise HTTPException(status_code=503, detail="Contagion engine is not available yet.")
+    return {"scenarios": get_available_contagion_scenarios()}
+
+
+@app.post("/api/contagion/simulate")
+def simulate_contagion(request: ContagionSimulationRequest) -> dict[str, Any]:
+    """Simulate multi-hop butterfly contagion across the economic dependency graph."""
+    if simulate_butterfly_shock is None:
+        raise HTTPException(status_code=503, detail="Contagion engine is not available yet.")
+    try:
+        portfolio_data: Any = None
+        if request.assets is not None:
+            portfolio_data = {"assets": request.assets}
+        elif request.portfolio is not None:
+            if isinstance(request.portfolio, list):
+                portfolio_data = {"assets": request.portfolio}
+            elif isinstance(request.portfolio, dict):
+                portfolio_data = request.portfolio
+
+        # Only fall back to mock data if neither assets nor portfolio were provided in request
+        if portfolio_data is None:
+            if PORTFOLIOS_FILE.is_file():
+                with PORTFOLIOS_FILE.open("r", encoding="utf-8") as file:
+                    raw_data = json.load(file)
+                    portfolios = raw_data if isinstance(raw_data, list) else raw_data.get("portfolios", [])
+                    if portfolios:
+                        portfolio_data = portfolios[0]
+            if portfolio_data is None:
+                portfolio_data = {"assets": []}
+
+        result = simulate_butterfly_shock(
+            scenario_id=request.scenario_id,
+            portfolio=portfolio_data,
+            custom_magnitude_pct=request.custom_magnitude_pct,
+        )
+        return result
+    except Exception as exc:
+        logger.exception("Butterfly contagion simulation failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/reverse-stress-test")
+def reverse_stress_test(request: ReverseStressTestRequest) -> dict[str, Any]:
+    """
+    Reverse Stress Testing (RST) Engine:
+    Solves the analytical Most Probable Failure Scenario (MPFS) that causes target portfolio loss L.
+    Computes Mahalanobis distance in sigmas and asset fragility rankings.
+    """
+    if compute_reverse_stress_test is None:
+        raise HTTPException(status_code=503, detail="Quant engine is not available yet.")
+
+    try:
+        portfolio_data: Any = None
+        if request.assets is not None:
+            portfolio_data = {"assets": request.assets}
+        elif request.portfolio is not None:
+            if isinstance(request.portfolio, list):
+                portfolio_data = {"assets": request.portfolio}
+            elif isinstance(request.portfolio, dict):
+                portfolio_data = request.portfolio
+
+        # Only fall back to mock data if neither assets nor portfolio were provided in request
+        if portfolio_data is None:
+            if PORTFOLIOS_FILE.is_file():
+                with PORTFOLIOS_FILE.open("r", encoding="utf-8") as file:
+                    raw_data = json.load(file)
+                    portfolios = raw_data if isinstance(raw_data, list) else raw_data.get("portfolios", [])
+                    if portfolios:
+                        portfolio_data = portfolios[0]
+            if portfolio_data is None:
+                portfolio_data = {"assets": []}
+
+        result = compute_reverse_stress_test(
+            portfolio=portfolio_data,
+            target_loss_pct=request.target_loss_pct,
+        )
+        return result
+    except Exception as exc:
+        logger.exception("Reverse stress test execution failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/butterfly", response_class=HTMLResponse)
+def get_butterfly_visualizer() -> str:
+    """Serve the interactive standalone Butterfly Effect Contagion visualizer."""
+    vis_path = Path(__file__).resolve().parent / "engine" / "contagion_visualizer.html"
+    if not vis_path.is_file():
+        raise HTTPException(status_code=404, detail="Visualizer HTML file not found.")
+    return vis_path.read_text(encoding="utf-8")
+
+
