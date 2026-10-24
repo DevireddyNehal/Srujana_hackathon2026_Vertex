@@ -1,0 +1,158 @@
+
+{
+  "portfolios": [
+    {
+      "id": "tech-heavy",
+      "name": "Aggressive Growth (Hidden IT Concentration)",
+      "investor_profile": {
+        "horizon_years": 1,
+        "risk_tolerance": "Low",
+        "liquidity_need": "High",
+        "target_goal_inr": 1000000
+      },
+      "assets": [
+        {
+          "ticker": "TCS.NS",
+          "name": "Tata Consultancy Services",
+          "sector": "IT",
+          "asset_class": "Equity",
+          "amount_inr": 400000,
+          "liquidity_tag": "High",
+          "currency_exposure": "USD_INR"
+        },
+        {
+          "ticker": "INFY.NS",
+          "name": "Infosys Ltd",
+          "sector": "IT",
+          "asset_class": "Equity",
+          "amount_inr": 350000,
+          "liquidity_tag": "High",
+          "currency_exposure": "USD_INR"
+        },
+        {
+          "ticker": "HDFCBANK.NS",
+          "name": "HDFC Bank",
+          "sector": "Banking",
+          "asset_class": "Equity",
+          "amount_inr": 150000,
+          "liquidity_tag": "High",
+          "currency_exposure": "INR"
+        },
+        {
+          "ticker": "REALTY_LOCKED",
+          "name": "Commercial REIT / Locked Debt",
+          "sector": "Real Estate",
+          "asset_class": "Debt",
+          "amount_inr": 100000,
+          "liquidity_tag": "Low",
+          "currency_exposure": "INR"
+        }
+      ]
+    },
+    {
+      "id": "conservative-retiree",
+      "name": "Conservative Retiree (Hidden Interest-Rate Risk)",
+      "investor_profile": {
+        "horizon_years": 5,
+        "risk_tolerance": "Low",
+        "liquidity_need": "Medium",
+        "target_goal_inr": 2500000
+      },
+      "assets": [
+        {
+          "ticker": "GSEC10Y_MOCK",
+          "name": "10-Year Government Securities (Demo Asset)",
+          "sector": "Government Bonds",
+          "asset_class": "Debt",
+          "amount_inr": 1250000,
+          "liquidity_tag": "Medium",
+          "currency_exposure": "INR"
+        },
+        {
+          "ticker": "CORP_BOND_FUND_MOCK",
+          "name": "Corporate Bond Fund (Demo Asset)",
+          "sector": "Corporate Bonds",
+          "asset_class": "Debt",
+          "amount_inr": 750000,
+          "liquidity_tag": "Medium",
+          "currency_exposure": "INR"
+        },
+        {
+          "ticker": "REIT_LOCKED_MOCK",
+          "name": "Real Estate REIT / Locked Asset (Demo Asset)",
+          "sector": "Real Estate",
+          "asset_class": "Alternative",
+          "amount_inr": 375000,
+          "liquidity_tag": "Low",
+          "currency_exposure": "INR"
+        },
+        {
+          "ticker": "ITC.NS",
+          "name": "ITC Ltd",
+          "sector": "FMCG",
+          "asset_class": "Equity",
+          "amount_inr": 125000,
+          "liquidity_tag": "High",
+          "currency_exposure": "INR"
+        }
+      ]
+    },
+    {
+      "id": "all-weather-balanced",
+      "name": "All-Weather Balanced (Resilient Benchmark)",
+      "investor_profile": {
+        "horizon_years": 3,
+        "risk_tolerance": "Moderate",
+        "liquidity_need": "Medium",
+        "target_goal_inr": 1500000
+      },
+      "assets": [
+        {
+          "ticker": "NIFTYBEES.NS",
+          "name": "Nifty 50 ETF (Demo Holding)",
+          "sector": "Diversified Equity",
+          "asset_class": "Equity",
+          "amount_inr": 525000,
+          "liquidity_tag": "High",
+          "currency_exposure": "INR"
+        },
+        {
+          "ticker": "LIQUIDBEES.NS",
+          "name": "Liquid ETF / Short-Duration Debt (Demo Holding)",
+          "sector": "Liquid Debt",
+          "asset_class": "Debt",
+          "amount_inr": 450000,
+          "liquidity_tag": "High",
+          "currency_exposure": "INR"
+        },
+        {
+          "ticker": "GOLDBEES.NS",
+          "name": "Gold ETF (Demo Holding)",
+          "sector": "Gold",
+          "asset_class": "Commodity",
+          "amount_inr": 300000,
+          "liquidity_tag": "High",
+          "currency_exposure": "INR"
+        },
+        {
+          "ticker": "HDFCBANK.NS",
+          "name": "HDFC Bank",
+          "sector": "Banking",
+          "asset_class": "Equity",
+          "amount_inr": 112500,
+          "liquidity_tag": "High",
+          "currency_exposure": "INR"
+        },
+        {
+          "ticker": "ITC.NS",
+          "name": "ITC Ltd",
+          "sector": "FMCG",
+          "asset_class": "Equity",
+          "amount_inr": 112500,
+          "liquidity_tag": "High",
+          "currency_exposure": "INR"
+        }
+      ]
+    }
+  ]
+}
