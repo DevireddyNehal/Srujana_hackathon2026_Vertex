@@ -74,3 +74,9 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Agent Skills & Tooling
+.agents/
+.claude/
+agent/
+skills-lock.json
