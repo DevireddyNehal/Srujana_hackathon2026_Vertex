@@ -1,4 +1,24 @@
-const API_BASE_URL = "http://localhost:8000";
+import type {
+  ContagionSimulationRequest,
+  ContagionSimulationResponse,
+  ReverseStressTestRequest,
+  ReverseStressTestResponse,
+  ScenarioRiskRequest,
+  ScenarioRiskResponse,
+} from "../types/riskEngine";
+
+export type {
+  ContagionSimulationRequest,
+  ContagionSimulationResponse,
+  ReverseStressTestRequest,
+  ReverseStressTestResponse,
+  ScenarioRiskRequest,
+  ScenarioRiskResponse,
+};
+
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
+).replace(/\/+$/, "");
 
 export interface InvestorProfile {
   horizon_years: number;
@@ -24,82 +44,17 @@ export interface Portfolio {
   assets: PortfolioAsset[];
 }
 
-export interface Scenario {
-  preset_name: string;
-  market_decline_pct: number;
-  interest_rate_change_bps: number;
-  sector_shocks: Record<string, number>;
-  currency_inr_usd_shift_pct: number;
-  custom_ai_prompt: string;
-}
-
-export interface ScenarioAnalysisRequest {
-  investor_profile: InvestorProfile;
-  assets: PortfolioAsset[];
-  scenario: Scenario;
-}
-
-export interface ScenarioAnalysisResponse {
-  summary: {
-    total_value_inr: number;
-    stressed_value_median_inr: number;
-    estimated_impact_inr: number;
-    estimated_impact_pct: number;
-    annualized_volatility_pct: number;
-    max_drawdown_pct: number;
-    diversification_score_out_of_100: number;
-    "illiquid_ share_pct": number;
-  };
-  composition: {
-    by_sector: Array<{ sector: string; weight_pct: number }>;
-    by_liquidity: Record<string, number>;
-  };
-  correlation_matrix: {
-    tickers: string[];
-    matrix: number[][];
-    high_correlation_warning: string;
-  };
-  chart_data: {
-    disclaimer: string;
-    historical_observations: Array<{
-      month: string;
-      actual_value: number;
-    }>;
-    hypothetical_projection_cone: Array<{
-      month: string;
-      p10_worst_case: number;
-      p50_median_case: number;
-      p90_best_case: number;
-      rebalanced_p50: number;
-    }>;
-  };
-  ai_analysis: {
-    assumptions_used: string[];
-    goal_conflicts: Array<{
-      severity: string;
-      type: string;
-      message: string;
-    }>;
-    alternative_portfolio: {
-      name: string;
-      proposed_assets: Array<{
-        ticker: string;
-        sector: string;
-        weight_pct: number;
-        amount_inr: number;
-      }>;
-      stressed_value_median_inr: number;
-      drawdown_saved_inr: number;
-      tradeoff_explanation: string;
-    };
-  };
-}
-
 async function requestJson<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, init);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, init);
+  } catch (error) {
+    const detail = error instanceof Error ? ` ${error.message}` : "";
+    throw new Error(`Cannot reach the risk engine at ${API_BASE_URL}.${detail}`);
+  }
 
   if (!response.ok) {
     const details = await response.text();
@@ -117,12 +72,40 @@ export async function getPortfolios(): Promise<{ portfolios: Portfolio[] }> {
   return requestJson<{ portfolios: Portfolio[] }>("/api/portfolios");
 }
 
-export async function analyzeScenario(
-  payload: ScenarioAnalysisRequest,
-): Promise<ScenarioAnalysisResponse> {
-  return requestJson<ScenarioAnalysisResponse>("/api/analyze-scenario", {
+function postJson<TRequest, TResponse>(
+  path: string,
+  payload: TRequest,
+): Promise<TResponse> {
+  return requestJson<TResponse>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+export function analyzeScenario(
+  payload: ScenarioRiskRequest,
+): Promise<ScenarioRiskResponse> {
+  return postJson<ScenarioRiskRequest, ScenarioRiskResponse>(
+    "/api/analyze-scenario",
+    payload,
+  );
+}
+
+export function runReverseStressTest(
+  payload: ReverseStressTestRequest,
+): Promise<ReverseStressTestResponse> {
+  return postJson<ReverseStressTestRequest, ReverseStressTestResponse>(
+    "/api/reverse-stress-test",
+    payload,
+  );
+}
+
+export function simulateContagion(
+  payload: ContagionSimulationRequest,
+): Promise<ContagionSimulationResponse> {
+  return postJson<ContagionSimulationRequest, ContagionSimulationResponse>(
+    "/api/contagion/simulate",
+    payload,
+  );
 }
