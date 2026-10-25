@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TradeFXBook - Professional Trading Journal & Analytics</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <!-- Chart.js for high performance financial visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- Header / Nav -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand">
+        <span class="logo-icon">📊</span>
+        <span class="brand-name">TradeFXBook</span>
+        <span class="demo-tag" id="demoBadge">SYNTHETIC DEMO DATASET</span>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <!-- Active Trader Switcher -->
+      <div class="trader-selector-wrap">
+        <label for="traderSelect">Trader Profile:</label>
+        <select id="traderSelect" class="styled-select"></select>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="account-stat">
+        <span class="stat-lbl">Account Balance:</span>
+        <span class="stat-val" id="headerBalance">$0.00</span>
+      </div>
+      <button class="btn btn-primary" id="btnOpenNewTrade">+ New Trade</button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-container">
+    <!-- Top Filter & Navigation Bar -->
+    <section class="control-panel">
+      <div class="nav-tabs">
+        <button class="tab-btn active" data-tab="overviewTab">Analytics Dashboard</button>
+        <button class="tab-btn" data-tab="journalTab">Trade History & Journal</button>
+        <button class="tab-btn" data-tab="adminTab">Dataset Health (100k)</button>
+      </div>
+
+      <div class="filter-controls">
+        <label for="rangePreset">Range:</label>
+        <select id="rangePreset" class="styled-select">
+          <option value="all" selected>All Time</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="30d">Last 30 Days</option>
+          <option value="90d">Last 90 Days</option>
+          <option value="ytd">Year to Date</option>
+          <option value="1y">Last 1 Year</option>
+          <option value="custom">Custom Range</option>
+        </select>
+
+        <div id="customDateWrap" class="custom-dates hidden">
+          <input type="date" id="customStartDate" class="styled-input">
+          <span>to</span>
+          <input type="date" id="customEndDate" class="styled-input">
+          <button class="btn btn-secondary btn-sm" id="btnApplyCustomDates">Apply</button>
+        </div>
+
+        <button class="btn btn-secondary btn-sm" id="btnRefreshData" title="Refresh data">🔄 Refresh</button>
+      </div>
+    </section>
+
+    <!-- TAB 1: ANALYTICS OVERVIEW -->
+    <div id="overviewTab" class="tab-content active">
+      <!-- Metric Cards Grid (22 Metrics) -->
+      <section class="kpi-grid">
+        <div class="kpi-card highlight-card">
+          <div class="kpi-label">Net Realized P&L</div>
+          <div class="kpi-value" id="kpiNetPnL">--</div>
+          <div class="kpi-sub" id="kpiGrossBreakdown">Gross: --</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Win Rate <small>(excl. BE)</small></div>
+          <div class="kpi-value" id="kpiWinRate">--</div>
+          <div class="kpi-sub" id="kpiWinLossRatio">Wins: -- | Losses: --</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Profit Factor</div>
+          <div class="kpi-value" id="kpiProfitFactor">--</div>
+          <div class="kpi-sub" id="kpiExpectancy">Expectancy: --</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Max Drawdown</div>
+          <div class="kpi-value text-loss" id="kpiMaxDrawdown">--</div>
+          <div class="kpi-sub" id="kpiDrawdownPct">--% peak-to-trough</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Avg Win / Avg Loss</div>
+          <div class="kpi-value" id="kpiAvgWinLoss">-- / --</div>
+          <div class="kpi-sub" id="kpiRRRatio">Avg R:R: --</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Total Closed Trades</div>
+          <div class="kpi-value" id="kpiTotalTrades">--</div>
+          <div class="kpi-sub" id="kpiBreakeven">Breakeven: --</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Trading Costs</div>
+          <div class="kpi-value text-warning" id="kpiCosts">--</div>
+          <div class="kpi-sub">Commissions, Fees & Swaps</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Avg Holding Time</div>
+          <div class="kpi-value" id="kpiAvgDuration">--</div>
+          <div class="kpi-sub" id="kpiDailyAvg">Avg Daily P&L: --</div>
+        </div>
+      </section>
+
+      <!-- Charts Section -->
+      <section class="charts-grid">
+        <!-- Daily Net P&L Chart -->
+        <div class="chart-box">
+          <div class="chart-header">
+            <h3>Daily Realized Net P&L</h3>
+            <span class="chart-subtitle">Continuous calendar days (zero-days included)</span>
+          </div>
+          <div class="chart-canvas-wrap">
+            <canvas id="dailyPnLChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Realized Equity Curve & Drawdown -->
+        <div class="chart-box">
+          <div class="chart-header">
+            <h3>Realized Equity Curve & Drawdown</h3>
+            <span class="chart-subtitle">Starting balance + chronological realized P&L</span>
+          </div>
+          <div class="chart-canvas-wrap">
+            <canvas id="equityCurveChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Extremes & Performance Breakdown -->
+      <section class="details-grid">
+        <!-- Best & Worst Records -->
+        <div class="panel-box">
+          <h3>Trading Extremes</h3>
+          <div class="extremes-list">
+            <div class="extreme-item">
+              <span class="ex-label">🌟 Best Trade</span>
+              <span class="ex-value text-win" id="exBestTrade">--</span>
+              <span class="ex-meta" id="exBestTradeMeta">--</span>
+            </div>
+            <div class="extreme-item">
+              <span class="ex-label">🛑 Worst Trade</span>
+              <span class="ex-value text-loss" id="exWorstTrade">--</span>
+              <span class="ex-meta" id="exWorstTradeMeta">--</span>
+            </div>
+            <div class="extreme-item">
+              <span class="ex-label">📅 Best Trading Day</span>
+              <span class="ex-value text-win" id="exBestDay">--</span>
+              <span class="ex-meta" id="exBestDayMeta">--</span>
+            </div>
+            <div class="extreme-item">
+              <span class="ex-label">🌧️ Worst Trading Day</span>
+              <span class="ex-value text-loss" id="exWorstDay">--</span>
+              <span class="ex-meta" id="exWorstDayMeta">--</span>
+            </div>
+            <div class="extreme-item">
+              <span class="ex-label">🔥 Streaks</span>
+              <span class="ex-value" id="exStreaks">Win: -- | Loss: --</span>
+              <span class="ex-meta">Max consecutive trades</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Strategy Breakdown Chart -->
+        <div class="panel-box">
+          <h3>Performance by Strategy / Setup</h3>
+          <div class="chart-canvas-wrap-sm">
+            <canvas id="strategyChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Session Breakdown Chart -->
+        <div class="panel-box">
+          <h3>Performance by Trading Session</h3>
+          <div class="chart-canvas-wrap-sm">
+            <canvas id="sessionChart"></canvas>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- TAB 2: TRADE HISTORY & JOURNAL -->
+    <div id="journalTab" class="tab-content">
+      <section class="journal-controls">
+        <div class="search-wrap">
+          <input type="text" id="journalSearch" class="styled-input" placeholder="Search symbol, notes, ID, tags...">
+        </div>
+        <div class="filter-group">
+          <select id="filterDirection" class="styled-select sm">
+            <option value="">All Directions</option>
+            <option value="LONG">Long</option>
+            <option value="SHORT">Short</option>
+          </select>
+
+          <select id="filterOutcome" class="styled-select sm">
+            <option value="">All Outcomes</option>
+            <option value="WIN">Wins (> 0)</option>
+            <option value="LOSS">Losses (< 0)</option>
+            <option value="BREAKEVEN">Breakeven (= 0)</option>
+          </select>
+
+          <select id="filterSession" class="styled-select sm">
+            <option value="">All Sessions</option>
+            <option value="London">London</option>
+            <option value="New York">New York</option>
+            <option value="Asian">Asian</option>
+            <option value="London/NY Overlap">London/NY Overlap</option>
+          </select>
+
+          <button class="btn btn-secondary btn-sm" id="btnExportCSV">📥 Export CSV</button>
+        </div>
+      </section>
+
+      <!-- Paginated Trades Table -->
+      <section class="table-responsive">
+        <table class="data-table" id="tradesTable">
+          <thead>
+            <tr>
+              <th data-sort="id">ID</th>
+              <th data-sort="exit_time">Date (Exit)</th>
+              <th data-sort="symbol">Symbol</th>
+              <th data-sort="direction">Direction</th>
+              <th data-sort="quantity">Lots</th>
+              <th>Entry Price</th>
+              <th>Exit Price</th>
+              <th data-sort="realized_r_multiple">R-Multiple</th>
+              <th data-sort="net_pnl">Net P&L</th>
+              <th>Strategy</th>
+              <th>Session</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tradesTableBody">
+            <tr>
+              <td colspan="12" class="text-center py-4">Loading trades...</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Pagination Footer -->
+      <footer class="pagination-footer">
+        <div class="page-info" id="paginationInfo">Showing 0 of 0 trades</div>
+        <div class="page-buttons">
+          <button class="btn btn-secondary btn-sm" id="btnPrevPage">Previous</button>
+          <span class="current-page-num" id="currentPageDisplay">Page 1</span>
+          <button class="btn btn-secondary btn-sm" id="btnNextPage">Next</button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- TAB 3: DATASET HEALTH & VERIFICATION -->
+    <div id="adminTab" class="tab-content">
+      <section class="admin-panel">
+        <div class="admin-card">
+          <h2>100,000 Demo Dataset Verification</h2>
+          <p class="admin-desc">
+            TradeFXBook is preloaded with exactly 10 deterministic demo trader profiles and exactly 10,000 closed trades per user, providing exactly 100,000 closed demo trades in total.
+          </p>
+
+          <div class="health-checks" id="healthChecksContainer">
+            <div class="loading-spinner">Verifying database integrity...</div>
+          </div>
+
+          <div class="users-breakdown-table mt-4">
+            <h3>Trader Dataset Breakdown</h3>
+            <table class="data-table" id="traderBreakdownTable">
+              <thead>
+                <tr>
+                  <th>Trader ID</th>
+                  <th>Name</th>
+                  <th>Style & Persona</th>
+                  <th>Starting Balance</th>
+                  <th>Timezone</th>
+                  <th>Closed Trades</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="traderBreakdownBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- MODAL: ADD / EDIT TRADE -->
+  <div class="modal-overlay hidden" id="tradeModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTitle">New Journal Trade Entry</h3>
+        <button class="close-btn" id="btnCloseModal">&times;</button>
+      </div>
+      <form id="tradeForm" class="modal-body">
+        <input type="hidden" id="formTradeId">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="formSymbol">Symbol *</label>
+            <input type="text" id="formSymbol" class="styled-input" required placeholder="EUR/USD">
+          </div>
+          <div class="form-group">
+            <label for="formAssetClass">Asset Class</label>
+            <select id="formAssetClass" class="styled-select">
+              <option value="Forex">Forex</option>
+              <option value="Commodity">Commodity</option>
+              <option value="Indices">Indices</option>
+              <option value="Crypto">Crypto</option>
+              <option value="Stock">Stock</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="formDirection">Direction *</label>
+            <select id="formDirection" class="styled-select" required>
+              <option value="LONG">LONG (Buy)</option>
+              <option value="SHORT">SHORT (Sell)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="formQuantity">Quantity / Lots *</label>
+            <input type="number" id="formQuantity" step="0.01" min="0.01" class="styled-input" required placeholder="1.0">
+          </div>
+          <div class="form-group">
+            <label for="formEntryPrice">Entry Price *</label>
+            <input type="number" id="formEntryPrice" step="0.00001" min="0.00001" class="styled-input" required placeholder="1.08500">
+          </div>
+          <div class="form-group">
+            <label for="formExitPrice">Exit Price</label>
+            <input type="number" id="formExitPrice" step="0.00001" min="0.00001" class="styled-input" placeholder="1.08950">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="formEntryTime">Entry Date & Time *</label>
+            <input type="datetime-local" id="formEntryTime" class="styled-input" required>
+          </div>
+          <div class="form-group">
+            <label for="formExitTime">Exit Date & Time</label>
+            <input type="datetime-local" id="formExitTime" class="styled-input">
+          </div>
+          <div class="form-group">
+            <label for="formStatus">Status</label>
+            <select id="formStatus" class="styled-select">
+              <option value="CLOSED">CLOSED</option>
+              <option value="OPEN">OPEN</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="formStopLoss">Stop Loss Price</label>
+            <input type="number" id="formStopLoss" step="0.00001" class="styled-input" placeholder="1.08200">
+          </div>
+          <div class="form-group">
+            <label for="formTakeProfit">Take Profit Price</label>
+            <input type="number" id="formTakeProfit" step="0.00001" class="styled-input" placeholder="1.09200">
+          </div>
+          <div class="form-group">
+            <label for="formPlannedRisk">Planned Risk ($)</label>
+            <input type="number" id="formPlannedRisk" step="0.01" class="styled-input" placeholder="500.00">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="formCommission">Commission ($)</label>
+            <input type="number" id="formCommission" step="0.01" class="styled-input" value="0.00">
+          </div>
+          <div class="form-group">
+            <label for="formFees">Other Fees ($)</label>
+            <input type="number" id="formFees" step="0.01" class="styled-input" value="0.00">
+          </div>
+          <div class="form-group">
+            <label for="formSwap">Signed Swap ($)</label>
+            <input type="number" id="formSwap" step="0.01" class="styled-input" value="0.00">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="formStrategy">Strategy / Setup</label>
+            <input type="text" id="formStrategy" class="styled-input" placeholder="Order Block / FVG">
+          </div>
+          <div class="form-group">
+            <label for="formSession">Trading Session</label>
+            <select id="formSession" class="styled-select">
+              <option value="London">London</option>
+              <option value="New York">New York</option>
+              <option value="Asian">Asian</option>
+              <option value="London/NY Overlap">London/NY Overlap</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="formEmotion">Emotional State</label>
+            <select id="formEmotion" class="styled-select">
+              <option value="Disciplined">Disciplined</option>
+              <option value="Calm">Calm</option>
+              <option value="Confident">Confident</option>
+              <option value="FOMO">FOMO</option>
+              <option value="Anxious">Anxious</option>
+              <option value="Revenge">Revenge</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="formNotes">Trade Notes & Lessons Learned</label>
+          <textarea id="formNotes" class="styled-textarea" rows="2" placeholder="Describe entry trigger, confluence, and execution review..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btnCancelModal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSaveTrade">Save Trade</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- DETAILS MODAL -->
+  <div class="modal-overlay hidden" id="detailsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="detailsTitle">Trade Details</h3>
+        <button class="close-btn" id="btnCloseDetailsModal">&times;</button>
+      </div>
+      <div class="modal-body" id="detailsBody"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
