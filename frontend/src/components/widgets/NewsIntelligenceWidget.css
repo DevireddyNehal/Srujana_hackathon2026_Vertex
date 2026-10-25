@@ -1,0 +1,207 @@
+.news-widget {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  padding: 20px;
+  border: 1px solid #dce8e2;
+  border-radius: 12px;
+  background: #fff;
+  color: #18332e;
+  box-shadow: 0 10px 28px rgba(27, 67, 56, 0.07);
+}
+
+.news-widget__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #dce8e2;
+}
+
+.news-widget__eyebrow {
+  margin: 0 0 5px;
+  color: #087f70;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.news-widget__header h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.news-widget__intro {
+  margin: 5px 0 0;
+  color: #637a73;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.news-widget__count {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid #dce8e2;
+  border-radius: 999px;
+  background: #f5f9f7;
+  color: #637a73;
+  font-size: 11px;
+}
+
+.news-widget__list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.news-widget__story {
+  padding: 15px 0;
+  border-bottom: 1px solid #dce8e2;
+}
+
+.news-widget__story:first-child {
+  padding-top: 0;
+}
+
+.news-widget__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  color: #637a73;
+  font-size: 10px;
+}
+
+.news-widget__story h3 {
+  margin: 8px 0 5px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.news-widget__story h3 a {
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+.news-widget__story h3 a:hover {
+  color: #087f70;
+  text-decoration: underline;
+}
+
+.news-widget__summary {
+  margin: 0;
+  color: #637a73;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.news-widget__assets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.news-widget__assets li {
+  padding: 4px 7px;
+  border: 1px solid #dce8e2;
+  border-radius: 5px;
+  background: #f5f9f7;
+  color: #637a73;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+}
+
+.news-widget__empty {
+  margin: 0;
+  padding: 20px 12px;
+  border: 1px dashed #dce8e2;
+  border-radius: 8px;
+  color: #637a73;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.news-widget__disclaimer {
+  margin: 0;
+  padding-top: 11px;
+  border-top: 1px solid #dce8e2;
+  color: #637a73;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.news-widget__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.aperture-app[data-theme='dark'] .news-widget {
+  border-color: #30483e;
+  background: #17251f;
+  color: #e5f1ec;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+}
+
+.aperture-app[data-theme='dark'] .news-widget__header {
+  border-color: #30483e;
+}
+
+.aperture-app[data-theme='dark'] .news-widget__eyebrow,
+.aperture-app[data-theme='dark'] .news-widget__story h3 a:hover {
+  color: #83d8be;
+}
+
+.aperture-app[data-theme='dark'] .news-widget__intro,
+.aperture-app[data-theme='dark'] .news-widget__meta,
+.aperture-app[data-theme='dark'] .news-widget__summary,
+.aperture-app[data-theme='dark'] .news-widget__disclaimer,
+.aperture-app[data-theme='dark'] .news-widget__empty {
+  color: #a2b8ae;
+}
+
+.aperture-app[data-theme='dark'] .news-widget__count,
+.aperture-app[data-theme='dark'] .news-widget__assets li {
+  border-color: #30483e;
+  background: #1d3027;
+  color: #a2b8ae;
+}
+
+.aperture-app[data-theme='dark'] .news-widget__story,
+.aperture-app[data-theme='dark'] .news-widget__disclaimer {
+  border-color: #30483e;
+}
+
+.aperture-app[data-theme='dark'] .news-widget__empty {
+  border-color: #30483e;
+}
+
+@media (max-width: 560px) {
+  .news-widget {
+    padding: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .news-widget *,
+  .news-widget *::before,
+  .news-widget *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

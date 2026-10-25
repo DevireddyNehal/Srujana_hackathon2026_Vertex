@@ -94,3 +94,15 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### Risk Engine API
+
+The Butterfly, Reverse Test, and full Risk Summary views send requests to the FastAPI service:
+
+- `POST /api/contagion/simulate`
+- `POST /api/reverse-stress-test`
+- `POST /api/analyze-scenario`
+
+Set `VITE_API_BASE_URL` in `frontend/.env.local` to the API origin. Copy the local default from [`frontend/.env.example`](frontend/.env.example). The service must be running and allow browser requests from the frontend origin. These API views report connection or server errors directly; they do not substitute sample responses.
+
+The backend source files are not present in this checkout, and the service on port 8000 was unavailable during frontend verification. If the site is shared through a browser tunnel, `localhost` refers to the viewer's own device; configure a backend URL reachable by that browser.
