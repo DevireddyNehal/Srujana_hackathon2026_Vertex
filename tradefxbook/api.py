@@ -6,7 +6,7 @@ Demo Trader Switching, and CSV Exports with strict user isolation.
 
 from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
