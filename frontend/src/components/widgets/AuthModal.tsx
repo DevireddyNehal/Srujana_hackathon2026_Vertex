@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { UserProfile } from "../../types/trading";
 import { getDemoUsers, switchDemoUser, loginUser, registerUser } from "../../api/client";
+
+const getFallbackIsoDate = () => new Date().toISOString();
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -29,15 +31,7 @@ export function AuthModal({ isOpen, onClose, currentUser, onUserChanged }: AuthM
   const [regCurrency, setRegCurrency] = useState("USD");
   const [regTimezone, setRegTimezone] = useState("America/New_York");
 
-  useEffect(() => {
-    if (isOpen) {
-      loadDemoUsers();
-      setErrorMsg(null);
-      setSuccessMsg(null);
-    }
-  }, [isOpen]);
-
-  async function loadDemoUsers() {
+  const loadDemoUsers = useCallback(async () => {
     try {
       setLoading(true);
       const users = await getDemoUsers();
@@ -47,7 +41,15 @@ export function AuthModal({ isOpen, onClose, currentUser, onUserChanged }: AuthM
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadDemoUsers();
+      setErrorMsg(null);
+      setSuccessMsg(null);
+    }
+  }, [isOpen, loadDemoUsers]);
 
   async function handleSwitchDemo(userId: string) {
     try {
@@ -62,7 +64,7 @@ export function AuthModal({ isOpen, onClose, currentUser, onUserChanged }: AuthM
         currency: "USD",
         timezone: "UTC",
         is_demo: true,
-        created_at: new Date().toISOString(),
+        created_at: getFallbackIsoDate(),
       };
       localStorage.setItem("vertex_active_user_id", res.active_user_id);
       localStorage.setItem("vertex_auth_token", res.token);

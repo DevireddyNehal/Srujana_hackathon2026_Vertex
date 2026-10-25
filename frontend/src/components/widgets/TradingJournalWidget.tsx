@@ -51,10 +51,10 @@ export function TradingJournalWidget({
   const [formAssetClass, setFormAssetClass] = useState("Forex");
   const [formDirection, setFormDirection] = useState<"LONG" | "SHORT">("LONG");
   const [formStatus, setFormStatus] = useState<"OPEN" | "CLOSED">("CLOSED");
-  const [formEntryTime, setFormEntryTime] = useState(
+  const [formEntryTime, setFormEntryTime] = useState(() =>
     new Date(Date.now() - 3600000).toISOString().slice(0, 16)
   );
-  const [formExitTime, setFormExitTime] = useState(
+  const [formExitTime, setFormExitTime] = useState(() =>
     new Date().toISOString().slice(0, 16)
   );
   const [formEntryPrice, setFormEntryPrice] = useState("1.0850");
