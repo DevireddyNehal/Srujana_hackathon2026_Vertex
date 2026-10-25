@@ -80,3 +80,8 @@ Thumbs.db
 .claude/
 agent/
 skills-lock.json
+
+# TradeFXBook (Isolated Module)
+tradefxbook/
+run_tradefxbook.py
+tests/test_tradefxbook.py
