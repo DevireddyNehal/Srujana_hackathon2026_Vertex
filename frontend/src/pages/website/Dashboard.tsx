@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import "./dashboard.css";
 import "./market-theme.css";
 import ClickEffects from "./ClickEffects";
@@ -30,19 +30,31 @@ import type {
   ScenarioRiskRequest,
   ScenarioRiskResponse,
 } from "../../types/riskEngine";
+import {
+  NewsIntelligenceWidget,
+  TradingJournalWidget,
+  UserStatisticsWidget,
+  AuthModal,
+} from "../../components/widgets";
+import "../../components/widgets/TradingWidgets.css";
+import type { UserProfile } from "../../types/trading";
+import { getDemoUsers } from "../../api/client";
 
 type Currency = "INR" | "USD";
-type PageName = "overview" | "allocation" | "stresslab" | "news" | "compare" | "butterfly" | "reverse";
+type PageName = "overview" | "journal" | "userstats" | "butterfly" | "reverse" | "allocation" | "compare" | "stresslab" | "news";
 
 const pages: Array<{ id: PageName; label: string; file: string; title: string; eyebrow: string }> = [
   { id: "overview", label: "Risk Summary", file: "index.html?page=overview", title: "Portfolio risk summary", eyebrow: "Portfolio analytics" },
+  { id: "journal", label: "Journal", file: "index.html?page=journal", title: "Trading Journal", eyebrow: "Trade execution & logging" },
+  { id: "userstats", label: "User Stats", file: "index.html?page=userstats", title: "User Trading Statistics", eyebrow: "Performance & analytics" },
   { id: "butterfly", label: "Butterfly", file: "index.html?page=butterfly", title: "Butterfly contagion", eyebrow: "Causal contagion analysis" },
   { id: "reverse", label: "Reverse Test", file: "index.html?page=reverse", title: "Reverse stress test", eyebrow: "Portfolio breaking point" },
   { id: "allocation", label: "Allocation", file: "index.html?page=allocation", title: "Allocation analysis", eyebrow: "Portfolio structure" },
-  { id: "stresslab", label: "Stress Lab", file: "index.html?page=stresslab", title: "Scenario stress lab", eyebrow: "Hypothetical analysis" },
   { id: "compare", label: "Compare", file: "index.html?page=compare", title: "Strategy comparison", eyebrow: "Allocation alternatives" },
+  { id: "stresslab", label: "Stress Lab", file: "index.html?page=stresslab", title: "Scenario stress lab", eyebrow: "Hypothetical analysis" },
   { id: "news", label: "News", file: "index.html?page=news", title: "Market news", eyebrow: "Market updates" },
 ];
+
 
 const pageGuidance: Record<PageName, { title: string; tips: [string, string] }> = {
   overview: {
@@ -52,6 +64,21 @@ const pageGuidance: Record<PageName, { title: string; tips: [string, string] }> 
       "Consider the time horizon and cash needs before interpreting any risk metric.",
     ],
   },
+  journal: {
+    title: "Systematic trade logging & discipline.",
+    tips: [
+      "Record entry thesis, invalidation levels, and emotions for repeatable edge.",
+      "Review historical trades regularly to eliminate recurring execution errors.",
+    ],
+  },
+  userstats: {
+    title: "Authoritative trading performance attribution.",
+    tips: [
+      "Evaluate win rate alongside expectancy and profit factor for full statistical context.",
+      "Track drawdown duration and peak-to-trough curves across market sessions.",
+    ],
+  },
+
   allocation: {
     title: "Look beyond the largest holding.",
     tips: [
@@ -67,10 +94,10 @@ const pageGuidance: Record<PageName, { title: string; tips: [string, string] }> 
     ],
   },
   news: {
-    title: "A dedicated space for market updates.",
+    title: "Market headlines & portfolio risk intelligence.",
     tips: [
-      "News and information will be added to this page later.",
-      "No live headlines are shown yet.",
+      "Filter real-time news by your active portfolio holdings to detect emerging exposure risks.",
+      "Use 'Test Stress Scenario' on any headline to model its potential downside impact in the Stress Lab.",
     ],
   },
   compare: {
@@ -119,12 +146,13 @@ function currentPage(): PageName {
 
 function loadSavedState(): SavedDashboardState | null {
   const raw = window.localStorage.getItem("aperture-risk-lab-state");
-  if (!raw) return null;
+  const urlScenarioParam = new URLSearchParams(window.location.search).get("scenario");
+  const urlScenario = urlScenarioParam ? scenarios.find((item) => item.id === urlScenarioParam) ?? null : null;
+  if (!raw && !urlScenario) return null;
 
   try {
-    const saved = JSON.parse(raw) as Partial<SavedDashboardState>;
-    const portfolio = portfolios.find((item) => item.id === saved.portfolioId);
-    if (!portfolio) return null;
+    const saved = raw ? (JSON.parse(raw) as Partial<SavedDashboardState>) : {};
+    const portfolio = portfolios.find((item) => item.id === saved.portfolioId) ?? portfolios[0];
     const weights = Array.isArray(saved.weights) && saved.weights.length === portfolio.holdings.length
       ? saved.weights.map((weight) => (Number.isFinite(weight) ? Math.max(0, weight) : 0))
       : portfolio.holdings.map((holding) => holding.weight);
@@ -139,9 +167,9 @@ function loadSavedState(): SavedDashboardState | null {
       alternativeWeights,
       period: saved.period === 24 ? 24 : 12,
       currency: saved.currency === "USD" ? "USD" : "INR",
-      activeScenario: scenarios.some((scenario) => scenario.id === saved.activeScenario?.id)
+      activeScenario: urlScenario ?? (scenarios.some((scenario) => scenario.id === saved.activeScenario?.id)
         ? saved.activeScenario ?? null
-        : null,
+        : null),
       riskTolerance: ["Conservative", "Moderate", "Aggressive"].includes(saved.riskTolerance ?? "")
         ? saved.riskTolerance!
         : profileRisk(portfolio.investorProfile),
@@ -233,7 +261,8 @@ function createAlternativeWeights(portfolio: Portfolio): number[] {
     const classTotal = byClass[holding.assetClass] ?? 0;
     const desiredTotal =
       ((bucketTarget[holding.assetClass] ?? 0) / availableTargetTotal) * 100;
-    return classTotal > 0 ? (desiredTotal * holding.weight) / classTotal : 0;
+    const val = classTotal > 0 ? (desiredTotal * holding.weight) / classTotal : 0;
+    return Math.round(val * 10) / 10;
   });
 }
 
@@ -256,6 +285,7 @@ function riskColor(value: number): string {
 
 function Header({
   activePage,
+  onNavigate,
   portfolioId,
   onPortfolioChange,
   currency,
@@ -265,8 +295,11 @@ function Header({
   darkMode,
   onToggleDarkMode,
   onReset,
+  currentUser,
+  onOpenAuthModal,
 }: {
   activePage: PageName;
+  onNavigate: (page: PageName) => void;
   portfolioId: string;
   onPortfolioChange: (id: string) => void;
   currency: Currency;
@@ -276,12 +309,22 @@ function Header({
   darkMode: boolean;
   onToggleDarkMode: () => void;
   onReset: () => void;
+  currentUser: UserProfile | null;
+  onOpenAuthModal: () => void;
 }) {
   const activeIndex = pages.findIndex((page) => page.id === activePage);
 
   return (
     <header className="app-header">
-      <a className="brand" href="index.html?page=overview" aria-label="Vertex portfolio risk lab home">
+      <a
+        className="brand"
+        href="?page=overview"
+        onClick={(e) => {
+          e.preventDefault();
+          onNavigate("overview");
+        }}
+        aria-label="Vertex portfolio risk lab home"
+      >
         <span className="brand-mark" aria-hidden="true">
           <span />
           <span />
@@ -293,7 +336,11 @@ function Header({
         {pages.map((page) => (
           <a
             key={page.id}
-            href={page.file}
+            href={`?page=${page.id}`}
+            onClick={(e) => {
+              e.preventDefault();
+              onNavigate(page.id);
+            }}
             className={activePage === page.id ? "active" : ""}
             aria-current={activePage === page.id ? "page" : undefined}
           >
@@ -302,6 +349,38 @@ function Header({
         ))}
       </nav>
       <div className="header-controls">
+        <button
+          type="button"
+          className="header-user-btn"
+          onClick={onOpenAuthModal}
+          title="Switch Trader / Login"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            background: "rgba(16, 185, 129, 0.12)",
+            border: "1px solid rgba(16, 185, 129, 0.35)",
+            color: "#10b981",
+            borderRadius: "8px",
+            padding: "6px 12px",
+            fontSize: "0.8rem",
+            fontWeight: "600",
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <span>👤</span>
+          <span>{currentUser?.name || "Demo Trader 01"}</span>
+          <span
+            style={{
+              width: "6px",
+              height: "6px",
+              borderRadius: "50%",
+              background: "#10b981",
+              boxShadow: "0 0 6px #10b981",
+            }}
+          />
+        </button>
         <label className="header-select">
           <span className="sr-only">Portfolio</span>
           <select value={portfolioId} onChange={(event) => onPortfolioChange(event.target.value)}>
@@ -330,8 +409,18 @@ function Header({
             <option value={24}>24 months</option>
           </select>
         </label>
-        <span className="data-status"><i /> Sample data</span>
-        <button type="button" className="reset-view" onClick={onReset}>Reset view</button>
+        <span className="data-status"><i /> Live Multi-User Data</span>
+        <button type="button" className="reset-view" onClick={onReset} title="Reset dashboard to portfolio defaults">Reset view</button>
+
+        <button
+          type="button"
+          className="theme-toggle-btn"
+          onClick={onToggleDarkMode}
+          aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`}
+          title={`Switch to ${darkMode ? "light" : "dark"} mode`}
+        >
+          <span aria-hidden="true">{darkMode ? "☀" : "☾"}</span>
+        </button>
         <details className="settings-menu">
           <summary aria-label="Settings" title="Settings">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -915,6 +1004,7 @@ function ScenarioPanel({
   hedgePreference,
   onHedgePreferenceChange,
   onSubmitRebalance,
+  customSubmitLabel,
 }: {
   activeScenario: Scenario | null;
   scenarioResult: ReturnType<typeof calculateScenario> | null;
@@ -932,6 +1022,7 @@ function ScenarioPanel({
   hedgePreference?: "multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive";
   onHedgePreferenceChange?: (val: "multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive") => void;
   onSubmitRebalance?: () => void;
+  customSubmitLabel?: string;
 }) {
   const canUseFx = portfolio.holdings.some((holding) => holding.fxExposure > 0);
   const isCustom = activeScenario?.id === "custom";
@@ -962,7 +1053,7 @@ function ScenarioPanel({
             >
               <span className="scenario-radio" />
               <span className="scenario-text"><strong>{item.label}</strong><small>{item.description}</small></span>
-              <span className="scenario-chevron">↗</span>
+              <span className="scenario-chevron">{selected ? "✓" : "›"}</span>
             </button>
           );
         })}
@@ -1036,7 +1127,7 @@ function ScenarioPanel({
               }
             }}
           >
-            ⚡ Submit &amp; Run Full Rebalance Analysis ↓
+            {customSubmitLabel ?? "⚡ Submit & Run Full Rebalance Analysis ↓"}
           </button>
         </div>
       )}
@@ -1050,9 +1141,16 @@ function ScenarioPanel({
 
           {hedgedScenarioResult ? (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", margin: "10px 0" }}>
-              <div style={{ padding: "10px", background: "rgba(224, 86, 36, 0.08)", borderRadius: "8px", border: "1px solid rgba(224, 86, 36, 0.2)" }}>
+              <div
+                style={{
+                  padding: "10px",
+                  background: scenarioResult.pnl >= 0 ? "rgba(46, 175, 125, 0.08)" : "rgba(224, 86, 36, 0.08)",
+                  borderRadius: "8px",
+                  border: scenarioResult.pnl >= 0 ? "1px solid rgba(46, 175, 125, 0.25)" : "1px solid rgba(224, 86, 36, 0.2)",
+                }}
+              >
                 <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.05em", color: "var(--muted)", marginBottom: "4px" }}>UNHEDGED BASELINE</div>
-                <div className="result-value negative-value" style={{ fontSize: "18px", lineHeight: "1.2" }}>
+                <div className={`result-value ${scenarioResult.pnl < 0 ? "negative-value" : "positive-value"}`} style={{ fontSize: "18px", lineHeight: "1.2" }}>
                   {signedMoney(scenarioResult.pnl, currency)}
                 </div>
                 <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "3px" }}>
@@ -1068,7 +1166,18 @@ function ScenarioPanel({
                   {signedMoney(hedgedScenarioResult.hedgedPnl, currency)}
                 </div>
                 <div style={{ fontSize: "11px", color: "var(--ink)", marginTop: "3px", fontWeight: 500 }}>
-                  {formatPercent(hedgedScenarioResult.hedgedReturnPct)} · <strong style={{ color: "#2EAF7D" }}>+{money(hedgedScenarioResult.drawdownSavedInr, currency, true)} saved!</strong>
+                  {scenarioResult.pnl >= 0 || hedgedScenarioResult.drawdownSavedInr <= 0 ? (
+                    <>
+                      {formatPercent(hedgedScenarioResult.hedgedReturnPct)} ·{" "}
+                      <strong style={{ color: "#2EAF7D" }}>
+                        Bull market expansion · No defensive hedge triggered
+                      </strong>
+                    </>
+                  ) : (
+                    <>
+                      {formatPercent(hedgedScenarioResult.hedgedReturnPct)} · <strong style={{ color: "#2EAF7D" }}>+{money(hedgedScenarioResult.drawdownSavedInr, currency, true)} saved!</strong>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -1092,7 +1201,17 @@ function ScenarioPanel({
               </div>
             )) : <p className="microcopy">No negative holding-level impact under these assumptions.</p>}
           </div>
-          <div className="assumption-note"><strong>Model assumptions</strong><span>Equity beta · bond duration · stated FX exposure. {hedgedScenarioResult ? `Hedged with ${maxTurnoverPct}% turnover into defensive assets.` : "No hedging, transaction costs, or cross-factor interactions included."}</span></div>
+          <div className="assumption-note">
+            <strong>Model assumptions</strong>
+            <span>
+              Equity beta · bond duration · stated FX exposure.{" "}
+              {hedgedScenarioResult
+                ? scenarioResult.pnl >= 0
+                  ? "Defensive hedges protect downside during contraction, leaving full upside participation during market expansions."
+                  : `Hedged with ${maxTurnoverPct}% turnover into defensive assets.`
+                : "No hedging, transaction costs, or cross-factor interactions included."}
+            </span>
+          </div>
         </div>
       ) : (
         <div className="scenario-idle">
@@ -1236,7 +1355,12 @@ function DiagnosticsPanel({
           </label>
           <label>Loss review threshold
             <select value={draftLossLimit} onChange={(event) => setDraftLossLimit(Number(event.target.value))}>
-              <option value={10}>10% loss</option><option value={15}>15% loss</option><option value={20}>20% loss</option><option value={30}>30% loss</option>
+              <option value={5}>5% loss</option>
+              <option value={10}>10% loss</option>
+              <option value={15}>15% loss</option>
+              <option value={20}>20% loss</option>
+              <option value={25}>25% loss</option>
+              <option value={30}>30% loss</option>
             </select>
           </label>
           <label>Turnover budget
@@ -1289,6 +1413,7 @@ function ComparisonPanel({
   alternativeWeights,
   onAlternativeWeightChange,
   onResetAlternative,
+  onAdoptAlternative,
   period,
   scenario,
   currency,
@@ -1298,6 +1423,7 @@ function ComparisonPanel({
   alternativeWeights: number[];
   onAlternativeWeightChange: (index: number, value: number) => void;
   onResetAlternative: () => void;
+  onAdoptAlternative?: () => void;
   period: 12 | 24;
   scenario: Scenario | null;
   currency: Currency;
@@ -1367,6 +1493,31 @@ function ComparisonPanel({
           {Math.abs(alternativeWeights.reduce((sum, weight) => sum + weight, 0) - 100) >= 0.01 && (
             <div className="inline-notice compact-notice">Alternative weights are proportionally rebased to 100% for comparison.</div>
           )}
+          {onAdoptAlternative && (
+            <button
+              type="button"
+              className="action-button primary"
+              style={{
+                marginTop: "12px",
+                width: "100%",
+                padding: "8px 12px",
+                fontSize: "12px",
+                fontWeight: 600,
+                borderRadius: "6px",
+                cursor: "pointer",
+                background: "var(--market-positive)",
+                color: "#fff",
+                border: "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+              }}
+              onClick={onAdoptAlternative}
+            >
+              ✓ Adopt Alternative as Live Portfolio
+            </button>
+          )}
         </div>
       </div>
       <div className="tradeoff-note">
@@ -1382,11 +1533,14 @@ function requestErrorMessage(error: unknown): string {
 }
 
 function apiAssets(portfolio: Portfolio, weights: number[]) {
-  return normalizeHoldings(portfolio, weights).holdings.map((holding) => ({
+  const normalized = normalizeHoldings(portfolio, weights).holdings;
+  const nonZero = normalized.filter((holding) => holding.marketValue > 0);
+  const activeHoldings = nonZero.length > 0 ? nonZero : normalized;
+  return activeHoldings.map((holding) => ({
     ticker: holding.ticker,
     name: holding.name,
     sector: holding.sector,
-    amount_inr: holding.marketValue,
+    amount_inr: Math.max(1, holding.marketValue),
     asset_class: holding.assetClass,
     liquidity_tag: holding.liquidity,
     currency_exposure: holding.currencyExposure,
@@ -1515,7 +1669,7 @@ function RiskSummaryEngine({
                       </span>
                     </div>
                     <div className="api-alternative-summary">
-                      <div><span>Modeled drawdown saved</span><strong>{money(alt.drawdown_saved_inr, currency)}</strong></div>
+                      <div><span>Modeled drawdown saved</span><strong>{alt.drawdown_saved_inr > 0 ? money(alt.drawdown_saved_inr, currency) : `${money(0, currency)} (Expansion)`}</strong></div>
                       <div><span>Stressed median</span><strong>{money(alt.stressed_value_median_inr, currency)}</strong></div>
                       {alt.estimated_friction_inr !== undefined && (
                         <div><span>Tax & friction</span><strong>~{money(alt.estimated_friction_inr, currency)}</strong></div>
@@ -1550,37 +1704,43 @@ function RiskSummaryEngine({
                         Constraints: Drawdown cap {alt.constraints_applied.max_loss_tolerance_pct}% · Turnover budget {alt.constraints_applied.turnover_budget_pct}% (Executed: {alt.constraints_applied.actual_turnover_pct}%) · Min liquidity: {alt.constraints_applied.min_liquidity_pct}% · Universe: {alt.constraints_applied.hedge_preference}
                       </p>
                     )}
-                    {onApplyRebalance && alt.proposed_assets && alt.proposed_assets.length > 0 && (
-                      <div style={{ marginTop: "14px" }}>
-                        <button
-                          type="button"
-                          className="action-button primary"
-                          style={{
-                            width: "100%",
-                            padding: "10px 14px",
-                            fontWeight: 600,
-                            fontSize: "12px",
-                            cursor: "pointer",
-                            background: "#2EAF7D",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: "6px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: "6px",
-                            boxShadow: "0 2px 8px rgba(46, 175, 125, 0.3)",
-                          }}
-                          onClick={() => onApplyRebalance(alt.proposed_assets)}
-                        >
-                          ✓ Adopt This Rebalance (Updates Cash &amp; Portfolio Above)
-                        </button>
-                        {rebalanceAdopted && (
-                          <div style={{ marginTop: "8px", padding: "6px 10px", background: "rgba(46, 175, 125, 0.1)", border: "1px solid #2EAF7D", borderRadius: "6px", color: "#2EAF7D", fontSize: "11px", fontWeight: 600, textAlign: "center" }}>
-                            ✓ Rebalance active — Liquid Cash Buffer &amp; Holdings updated above!
-                          </div>
-                        )}
-                      </div>
+                    {onApplyRebalance && (
+                      alt.actionable_trades && alt.actionable_trades.length > 0 ? (
+                        <div style={{ marginTop: "14px" }}>
+                          <button
+                            type="button"
+                            className="action-button primary"
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              fontWeight: 600,
+                              fontSize: "12px",
+                              cursor: "pointer",
+                              background: rebalanceAdopted ? "#16803C" : "#2EAF7D",
+                              color: "#fff",
+                              border: "none",
+                              borderRadius: "6px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: "6px",
+                              boxShadow: "0 2px 8px rgba(46, 175, 125, 0.3)",
+                            }}
+                            onClick={() => onApplyRebalance(alt.proposed_assets)}
+                          >
+                            ✓ Adopt This Rebalance (Updates Cash &amp; Portfolio Above)
+                          </button>
+                          {rebalanceAdopted && (
+                            <div style={{ marginTop: "8px", padding: "6px 10px", background: "rgba(46, 175, 125, 0.1)", border: "1px solid #2EAF7D", borderRadius: "6px", color: "#2EAF7D", fontSize: "11px", fontWeight: 600, textAlign: "center" }}>
+                              ✓ Rebalance active — Liquid Cash Buffer &amp; Holdings updated above!
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: "14px", padding: "10px 14px", background: "rgba(46, 175, 125, 0.08)", border: "1px solid rgba(46, 175, 125, 0.25)", borderRadius: "6px", color: "#2EAF7D", fontSize: "11px", fontWeight: 600, textAlign: "center" }}>
+                          ✓ Current portfolio allocation is optimal under this scenario · No defensive rebalance required
+                        </div>
+                      )
                     )}
                   </>
                 );
@@ -1985,7 +2145,30 @@ function ReverseStressPage({
 
 export default function Dashboard() {
   const [savedState] = useState(loadSavedState);
-  const [activePage] = useState(currentPage);
+  const [activePage, setActivePage] = useState<PageName>(currentPage);
+
+  const navigateTo = useCallback((page: PageName) => {
+    setActivePage(page);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("page", page);
+      window.history.pushState({ page }, "", url.toString());
+    } catch {
+      // fallback
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const page = new URLSearchParams(window.location.search).get("page");
+      const validPage = pages.some((item) => item.id === page) ? (page as PageName) : "overview";
+      setActivePage(validPage);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const [portfolioId, setPortfolioId] = useState(savedState?.portfolioId ?? portfolios[0].id);
   const basePortfolio = portfolios.find((item) => item.id === portfolioId) ?? portfolios[0];
   const [customHoldings, setCustomHoldings] = useState<Holding[] | null>(null);
@@ -1998,7 +2181,14 @@ export default function Dashboard() {
   const [alternativeWeights, setAlternativeWeights] = useState(savedState?.alternativeWeights ?? createAlternativeWeights(portfolio));
   const [period, setPeriod] = useState<12 | 24>(savedState?.period ?? 12);
   const [currency, setCurrency] = useState<Currency>(savedState?.currency ?? "INR");
-  const [activeScenario, setActiveScenario] = useState<Scenario | null>(savedState?.activeScenario ?? scenarios[0]);
+  const [activeScenario, setActiveScenario] = useState<Scenario | null>(() => {
+    const urlScenarioParam = new URLSearchParams(window.location.search).get("scenario");
+    if (urlScenarioParam) {
+      const match = scenarios.find((s) => s.id === urlScenarioParam);
+      if (match) return match;
+    }
+    return savedState?.activeScenario ?? scenarios[0];
+  });
   const [riskTolerance, setRiskTolerance] = useState(savedState?.riskTolerance ?? profileRisk(portfolio.investorProfile));
   const [horizon, setHorizon] = useState(savedState?.horizon ?? portfolio.investorProfile.horizon_years);
   const [liquidityNeed, setLiquidityNeed] = useState(savedState?.liquidityNeed ?? demoLiquidityNeed(portfolio));
@@ -2009,6 +2199,58 @@ export default function Dashboard() {
   const [darkMode, setDarkMode] = useState(loadSessionTheme);
   const [diagnosticsFormVersion, setDiagnosticsFormVersion] = useState(0);
   const pageMeta = pages.find((page) => page.id === activePage) ?? pages[0];
+
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    if (typeof localStorage !== "undefined") {
+      const stored = localStorage.getItem("vertex_active_user");
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch {
+          // fallback
+        }
+      }
+    }
+    return {
+      id: "demo_trader_01",
+      name: "Demo Trader 01",
+      email: "demo.trader01@tradefxbook.demo",
+      starting_balance: 50000,
+      currency: "USD",
+      timezone: "America/New_York",
+      is_demo: true,
+      profile_description: "Conservative Swing Trader",
+      created_at: new Date().toISOString(),
+    };
+  });
+  const [authToken, setAuthToken] = useState<string | null>(() => {
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem("vertex_auth_token") || "demo_token_demo_trader_01";
+    }
+    return "demo_token_demo_trader_01";
+  });
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  useEffect(() => {
+    getDemoUsers()
+      .then((users) => {
+        if (users && users.length > 0) {
+          const currentId = localStorage.getItem("vertex_active_user_id") || "demo_trader_01";
+          const match = users.find((u) => u.id === currentId) || users[0];
+          setCurrentUser(match);
+        }
+      })
+      .catch((e) => console.error("Initial demo users fetch:", e));
+  }, []);
+
+  const handleUserChanged = (user: UserProfile, token: string) => {
+    setCurrentUser(user);
+    setAuthToken(token);
+    localStorage.setItem("vertex_active_user_id", user.id);
+    localStorage.setItem("vertex_active_user", JSON.stringify(user));
+    localStorage.setItem("vertex_auth_token", token);
+  };
+
 
   useEffect(() => {
     try {
@@ -2130,6 +2372,11 @@ export default function Dashboard() {
       : weight));
   };
   const resetView = () => {
+    try {
+      window.localStorage.removeItem("aperture-risk-lab-state");
+    } catch {
+      // ignore
+    }
     setCustomHoldings(null);
     setRebalanceAdopted(false);
     setWeights(basePortfolio.holdings.map((holding) => holding.weight));
@@ -2158,6 +2405,18 @@ export default function Dashboard() {
   };
 
   const handleRunFullAnalysis = () => {
+    if (activePage !== "stresslab" && activePage !== "overview") {
+      navigateTo("stresslab");
+      setTimeout(() => {
+        const panel = document.getElementById("risk-summary-engine");
+        if (panel) {
+          panel.scrollIntoView({ behavior: "smooth" });
+          const runBtn = panel.querySelector<HTMLButtonElement>(".api-run-button");
+          runBtn?.click();
+        }
+      }, 150);
+      return;
+    }
     const panel = document.getElementById("risk-summary-engine");
     if (panel) {
       panel.scrollIntoView({ behavior: "smooth" });
@@ -2212,6 +2471,7 @@ export default function Dashboard() {
       <ClickEffects />
       <Header
         activePage={activePage}
+        onNavigate={navigateTo}
         portfolioId={portfolioId}
         onPortfolioChange={changePortfolio}
         currency={currency}
@@ -2221,26 +2481,47 @@ export default function Dashboard() {
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode((enabled) => !enabled)}
         onReset={resetView}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
       />
+
       <div className="workspace">
         <div className="workspace-intro">
-          <div>
-            <div className="breadcrumb">{pageMeta.eyebrow.toUpperCase()} <span>/</span> {pageMeta.title.toUpperCase()}</div>
-            <h1>{portfolio.name}<span className="title-separator">·</span><small>{portfolio.owner}</small></h1>
-            <div className="profile-metadata">
-              <span>Goal <strong>{money(portfolio.investorProfile.target_goal_inr, currency, true)}</strong></span>
-              <i />
-              <span>Horizon <strong>{portfolio.investorProfile.horizon_years} year{portfolio.investorProfile.horizon_years === 1 ? "" : "s"}</strong></span>
-              <i />
-              <span>Risk <strong>{portfolio.investorProfile.risk_tolerance}</strong></span>
-              <i />
-              <span>Liquidity need <strong>{portfolio.investorProfile.liquidity_need}</strong></span>
+          {activePage === "journal" || activePage === "userstats" ? (
+            <div>
+              <div className="breadcrumb">{pageMeta.eyebrow.toUpperCase()} <span>/</span> {pageMeta.title.toUpperCase()}</div>
+              <h1>{activePage === "journal" ? "Trading Journal" : "User Trading Statistics"}<span className="title-separator">·</span><small className="portfolio-owner">{currentUser?.name || "Active Trader"}</small></h1>
+              <div className="profile-metadata">
+                <span>Account <strong>{currentUser?.currency || "USD"} ${(currentUser?.starting_balance ?? 50000).toLocaleString()}</strong></span>
+                <i />
+                <span>Timezone <strong>{currentUser?.timezone || "UTC"}</strong></span>
+                <i />
+                <span>Type <strong>{currentUser?.is_demo ? "Seeded Demo Persona" : "Live Custom Trader"}</strong></span>
+              </div>
             </div>
-          </div>
-          <div className="as-of"><span className="live-indicator" />DEMO MODE <span>·</span> Illustrative sample data</div>
+          ) : (
+            <div>
+              <div className="breadcrumb">{pageMeta.eyebrow.toUpperCase()} <span>/</span> {pageMeta.title.toUpperCase()}</div>
+              <h1>{portfolio.name}<span className="title-separator">·</span><small className="portfolio-owner">{portfolio.owner}</small></h1>
+              <div className="profile-metadata">
+                <span>Goal <strong>{money(portfolio.investorProfile.target_goal_inr, currency, true)}</strong></span>
+                <i />
+                <span>Horizon <strong>{portfolio.investorProfile.horizon_years} year{portfolio.investorProfile.horizon_years === 1 ? "" : "s"}</strong></span>
+                <i />
+                <span>Risk <strong>{portfolio.investorProfile.risk_tolerance}</strong></span>
+                <i />
+                <span>Liquidity need <strong>{portfolio.investorProfile.liquidity_need}</strong></span>
+              </div>
+            </div>
+          )}
+          <div className="as-of"><span className="live-indicator" />{activePage === "journal" || activePage === "userstats" ? `${currentUser?.name || "Trader"} · Real-time Database Session` : "DEMO MODE · Illustrative sample data"}</div>
         </div>
-        <MetricStrip portfolio={portfolio} weights={weights} period={period} currency={currency} metrics={metrics} />
-        {currency === "USD" && <p className="fx-disclosure">USD amounts use an illustrative ₹{illustrativeUsdInr.toFixed(2)}/$ conversion for display only; calculations remain in INR.</p>}
+        {activePage !== "journal" && activePage !== "userstats" && (
+          <>
+            <MetricStrip portfolio={portfolio} weights={weights} period={period} currency={currency} metrics={metrics} />
+            {currency === "USD" && <p className="fx-disclosure">USD amounts use an illustrative ₹{illustrativeUsdInr.toFixed(2)}/$ conversion for display only; calculations remain in INR.</p>}
+          </>
+        )}
         <div className={`page-content page-${activePage}`} key={activePage}>
           {activePage === "overview" && (
             <div className="analysis-grid overview-grid">
@@ -2392,6 +2673,10 @@ export default function Dashboard() {
                 alternativeWeights={alternativeWeights}
                 onAlternativeWeightChange={(index, value) => updateWeight(setAlternativeWeights, alternativeWeights, index, value)}
                 onResetAlternative={() => setAlternativeWeights(createAlternativeWeights(portfolio))}
+                onAdoptAlternative={() => {
+                  setWeights([...alternativeWeights]);
+                  setRebalanceAdopted(true);
+                }}
                 period={period}
                 scenario={activeScenario}
                 currency={currency}
@@ -2412,16 +2697,25 @@ export default function Dashboard() {
                 onMinLiquidityPctChange={setMinLiquidityPct}
                 hedgePreference={hedgePreference}
                 onHedgePreferenceChange={setHedgePreference}
-                onSubmitRebalance={handleRunFullAnalysis}
+                onSubmitRebalance={() => navigateTo("stresslab")}
+                customSubmitLabel="Run Quantitative Engine in Stress Lab →"
               />
             </div>
           )}
           {activePage === "news" && (
-            <section className="panel news-placeholder" aria-labelledby="news-heading">
-              <span className="eyebrow">NEWS</span>
-              <h2 id="news-heading">Market updates will appear here</h2>
-              <p>This section is ready for news and information to be added later.</p>
-            </section>
+            <NewsIntelligenceWidget
+              portfolio={portfolio}
+              currency={currency}
+              onNavigateToStressLab={(_headline, _ticker, scenarioId) => {
+                const targetScenario = scenarios.find((s) => s.id === scenarioId) ?? scenarios[0];
+                setActiveScenario(targetScenario);
+                navigateTo("stresslab");
+                setTimeout(() => {
+                  const el = document.getElementById("scenarios");
+                  el?.scrollIntoView({ behavior: "smooth" });
+                }, 100);
+              }}
+            />
           )}
           {activePage === "butterfly" && (
             <ButterflyContagionPage portfolio={portfolio} weights={weights} currency={currency} />
@@ -2429,16 +2723,46 @@ export default function Dashboard() {
           {activePage === "reverse" && (
             <ReverseStressPage portfolio={portfolio} weights={weights} currency={currency} />
           )}
+          {activePage === "journal" && (
+            <TradingJournalWidget
+              currentUser={currentUser}
+              authToken={authToken}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          )}
+          {activePage === "userstats" && (
+            <UserStatisticsWidget
+              currentUser={currentUser}
+              authToken={authToken}
+              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            />
+          )}
           {activePage === "overview" && (
             <div className="overview-allocation-teaser">
               <div><span className="eyebrow">Portfolio composition</span><strong>Review the holdings and concentration behind this risk profile.</strong></div>
-              <a href="index.html?page=allocation">Explore allocation <span>→</span></a>
+              <a
+                href="?page=allocation"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigateTo("allocation");
+                }}
+              >
+                Explore allocation <span>→</span>
+              </a>
             </div>
           )}
           {activePage === "overview" && activeScenario && scenarioResult && (
             <div className="overview-compare-teaser">
               <span><strong>{activeScenario.label}</strong> models an impact of {signedMoney(scenarioResult.pnl, currency)}.</span>
-              <a href="index.html?page=stresslab">Open Stress Lab <span>→</span></a>
+              <a
+                href="?page=stresslab"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigateTo("stresslab");
+                }}
+              >
+                Open Stress Lab <span>→</span>
+              </a>
             </div>
           )}
           <div className="page-endcap">
@@ -2465,9 +2789,27 @@ export default function Dashboard() {
         <footer className="app-footer">
           <span><span className="footer-mark">V</span> VERTEX <span>PORTFOLIO RISK LAB</span></span>
           <p>DEMO MODE · Mock data only · Scenario outputs are not forecasts or guarantees.</p>
-          <a href="index.html?page=overview">Overview ↑</a>
+          <a
+            href="?page=overview"
+            onClick={(e) => {
+              e.preventDefault();
+              if (activePage === "overview") {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              } else {
+                navigateTo("overview");
+              }
+            }}
+          >
+            Overview ↑
+          </a>
         </footer>
       </div>
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        onUserChanged={handleUserChanged}
+      />
     </main>
   );
 }

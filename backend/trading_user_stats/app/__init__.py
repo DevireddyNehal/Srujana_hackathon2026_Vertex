@@ -1,0 +1,1 @@
+"""Trading user statistics application."""

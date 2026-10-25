@@ -18,6 +18,24 @@ try:
 except ImportError:  # pragma: no cover - used when main.py is imported directly
     from database import initialize_database, save_analysis  # type: ignore[no-redef]
 
+if __package__:
+    from .journal.router import router as journal_router
+    from .journal.storage import initialize_storage as initialize_journal_storage
+else:  # pragma: no cover - supports running from inside backend/
+    from journal.router import router as journal_router
+    from journal.storage import initialize_storage as initialize_journal_storage
+
+try:
+    from tradefxbook.api import router as tradefxbook_router
+    from tradefxbook.database import init_db as init_tradefxbook_db
+    from tradefxbook.generator import seed_demo_dataset, check_demo_dataset_status
+except ImportError:  # pragma: no cover
+    tradefxbook_router = None
+    init_tradefxbook_db = None
+    seed_demo_dataset = None
+    check_demo_dataset_status = None
+
+
 try:
     if __package__:
         from .engine.quant import run_portfolio_scenario, compute_reverse_stress_test
@@ -72,10 +90,10 @@ class Asset(StrictModel):
 
 class Scenario(StrictModel):
     preset_name: str = Field(default="Custom Scenario", min_length=1, max_length=120)
-    market_decline_pct: float = Field(default=0.0, ge=-50.0, le=0.0)
-    interest_rate_change_bps: int = Field(default=0, ge=-100, le=300)
+    market_decline_pct: float = Field(default=0.0, ge=-100.0, le=50.0)
+    interest_rate_change_bps: int = Field(default=0, ge=-500, le=1000)
     sector_shocks: dict[str, float] = Field(default_factory=dict)
-    currency_inr_usd_shift_pct: float = Field(default=0.0, ge=-15.0, le=15.0)
+    currency_inr_usd_shift_pct: float = Field(default=0.0, ge=-50.0, le=50.0)
     custom_ai_prompt: str = Field(default="", max_length=2000)
 
     @field_validator("sector_shocks")
@@ -86,8 +104,8 @@ class Scenario(StrictModel):
             name = sector.strip()
             if not name:
                 raise ValueError("sector shock keys cannot be empty")
-            if not -60.0 <= percentage <= 60.0:
-                raise ValueError(f"sector shock for {name} must be between -60 and +60 percent")
+            if not -100.0 <= percentage <= 100.0:
+                raise ValueError(f"sector shock for {name} must be between -100 and +100 percent")
             cleaned[name] = percentage
         return cleaned
 
@@ -111,9 +129,9 @@ class PortfolioFile(StrictModel):
 
 
 class RecommendationConstraints(BaseModel):
-    max_loss_tolerance_pct: float | None = Field(default=None, ge=1.0, le=50.0)
-    max_turnover_pct: float | None = Field(default=None, ge=5.0, le=60.0)
-    min_liquidity_pct: float | None = Field(default=None, ge=0.0, le=60.0)
+    max_loss_tolerance_pct: float | None = Field(default=None, ge=0.0, le=100.0)
+    max_turnover_pct: float | None = Field(default=None, ge=0.0, le=100.0)
+    min_liquidity_pct: float | None = Field(default=None, ge=0.0, le=100.0)
     hedge_preference: Literal["multi_asset", "gold_focus", "liquid_debt_focus", "equity_defensive"] | None = "multi_asset"
 
     model_config = ConfigDict(extra="ignore")
@@ -159,6 +177,12 @@ class ReverseStressTestRequest(BaseModel):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     initialize_database()
+    initialize_journal_storage()
+    if init_tradefxbook_db:
+        init_tradefxbook_db()
+        status = check_demo_dataset_status()
+        if not status.get("is_complete"):
+            seed_demo_dataset()
     yield
 
 
@@ -168,6 +192,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.include_router(journal_router)
+if tradefxbook_router:
+    app.include_router(tradefxbook_router)
+
 
 
 def _get_cors_origins() -> list[str]:

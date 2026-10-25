@@ -820,3 +820,662 @@ html[data-theme="light"] body {
     fill-opacity: 1;
   }
 }
+
+/* ==========================================================================
+   UI Clutter Prevention & Visual Polish (Responsive, Anti-Overflow)
+   ========================================================================== */
+
+/* Header & Top Navigation */
+.aperture-app .app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: 0 clamp(12px, 1.8vw, 24px);
+  gap: clamp(8px, 1vw, 16px);
+  flex-wrap: nowrap;
+  max-width: 100vw;
+  box-sizing: border-box;
+  overflow-x: clip;
+}
+
+.aperture-app .top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 0.9vw, 14px);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.aperture-app .top-nav a {
+  white-space: nowrap !important;
+  padding: 20px 4px 18px !important;
+  font-size: 13px !important;
+  font-weight: 500;
+  line-height: 1.2 !important;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.aperture-app .top-nav a::after {
+  bottom: 10px;
+  height: 2px;
+}
+
+.aperture-app .header-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.aperture-app .header-select select {
+  min-width: 150px;
+  max-width: 220px;
+  height: 34px;
+  font-size: 12px;
+  padding: 0 26px 0 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 6px;
+}
+
+.aperture-app .currency-select select,
+.aperture-app .period-select select {
+  min-width: 76px;
+  max-width: 95px;
+  height: 34px;
+  font-size: 12px;
+}
+
+.aperture-app .reset-view {
+  height: 34px;
+  font-size: 12px;
+  padding: 0 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.aperture-app .data-status {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Workspace Intro & Header Banner */
+.aperture-app .workspace-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.aperture-app .workspace-intro h1 {
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin: 4px 0 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.aperture-app .workspace-intro h1 small.portfolio-owner {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--market-text-secondary);
+}
+
+.aperture-app .profile-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.aperture-app .profile-metadata span {
+  background: var(--market-surface-elevated);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--market-border);
+  font-size: 11px;
+}
+
+.aperture-app .profile-metadata strong {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--market-text);
+}
+
+.aperture-app .as-of {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 6px 14px;
+  background: var(--market-surface-elevated);
+  border: 1px solid var(--market-border);
+  border-radius: 999px;
+  margin-top: 4px;
+}
+
+.aperture-app .as-of .live-indicator {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+}
+
+/* Top Metric Cards */
+.aperture-app .metric-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  margin-bottom: 20px;
+}
+
+.aperture-app .metric-card {
+  border: 1px solid var(--market-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: var(--shadow);
+  box-sizing: border-box;
+}
+
+.aperture-app .metric-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--market-text-secondary);
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.aperture-app .metric-state {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.aperture-app .metric-value {
+  font-size: clamp(18px, 1.6vw, 24px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+  margin: 4px 0;
+  overflow-wrap: break-word;
+}
+
+.aperture-app .metric-foot {
+  font-size: 11px;
+  color: var(--market-text-secondary);
+  margin-top: 6px;
+  line-height: 1.4;
+  white-space: normal !important;
+  word-break: break-word;
+}
+
+/* Alternative Mix & Comparison Layout */
+.aperture-app .comparison-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr);
+  gap: 20px;
+}
+
+.aperture-app .alternative-editor {
+  padding-left: 20px;
+  border-left: 1px solid var(--market-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.aperture-app .alternative-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.aperture-app .alternative-heading small {
+  font-size: 11px;
+  color: var(--market-text-secondary);
+  margin-left: auto;
+}
+
+.aperture-app .alternative-weights {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.aperture-app .alternative-weights label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 12px;
+  border: 1px solid var(--market-border);
+  border-radius: 6px;
+  background: var(--market-surface-elevated);
+  font-size: 12px;
+  font-family: var(--mono);
+}
+
+.aperture-app .alternative-weights label span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--market-text);
+  font-size: 12px;
+}
+
+.aperture-app .alternative-weights input {
+  width: 60px !important;
+  min-width: 60px !important;
+  flex: 0 0 60px;
+  height: 26px;
+  padding: 2px 6px;
+  margin-left: auto;
+  border: 1px solid var(--market-border);
+  border-radius: 4px;
+  background: var(--market-surface);
+  color: var(--market-text);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: right;
+  box-sizing: border-box;
+}
+
+.aperture-app .alternative-weights i {
+  font-size: 11px;
+  color: var(--market-text-secondary);
+  font-style: normal;
+  margin-left: 3px;
+  flex-shrink: 0;
+}
+
+/* Allocation Weight Field */
+.aperture-app .weight-field {
+  display: inline-flex;
+  width: 68px;
+  height: 30px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 8px;
+  border: 1px solid var(--market-border);
+  border-radius: 6px;
+  background: var(--market-surface-elevated);
+  box-sizing: border-box;
+}
+
+.aperture-app .weight-field input {
+  width: 40px !important;
+  min-width: 40px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--market-text);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: right;
+}
+
+.aperture-app .weight-field span {
+  font-size: 11px;
+  color: var(--market-text-secondary);
+  margin-left: 2px;
+}
+
+/* Tradeoff Note & Comparison Table */
+.aperture-app .comparison-table th,
+.aperture-app .comparison-table td {
+  font-size: 12px;
+  padding: 9px 12px;
+}
+
+.aperture-app .comparison-table thead th {
+  font-size: 11px;
+}
+
+.aperture-app .tradeoff-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--market-border);
+  border-radius: 6px;
+  background: var(--market-surface-elevated);
+}
+
+.aperture-app .tradeoff-note p {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--market-text-secondary);
+}
+
+.aperture-app .tradeoff-note strong {
+  color: var(--market-text);
+  font-weight: 600;
+}
+
+/* Page Endcap & Learning Notes (Anti-Overflow) */
+.aperture-app .page-endcap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  margin-top: 24px;
+  padding: 18px 20px;
+  border-top: 1px solid var(--market-border);
+  flex-wrap: wrap;
+}
+
+.aperture-app .endcap-tips li {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--market-text-secondary);
+}
+
+.aperture-app .endcap-tips li span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--market-positive);
+}
+
+/* Footer */
+.aperture-app .app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 0 16px;
+  font-size: 12px;
+  color: var(--market-text-secondary);
+  border-top: 1px solid var(--market-border);
+  margin-top: 24px;
+}
+
+.aperture-app .app-footer a {
+  font-size: 12px;
+  color: var(--market-positive);
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.aperture-app .app-footer a:hover {
+  text-decoration: underline;
+}
+
+/* Light Mode Header Polish (Fix black void defect) */
+.aperture-app[data-theme="light"] .app-header {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+.aperture-app[data-theme="light"] .brand-name {
+  color: #0f172a !important;
+}
+
+.aperture-app[data-theme="light"] .brand-name small,
+.aperture-app[data-theme="light"] .brand-divider {
+  color: #64748b !important;
+}
+
+.aperture-app[data-theme="light"] .top-nav a {
+  color: #475569 !important;
+}
+
+.aperture-app[data-theme="light"] .top-nav a:hover,
+.aperture-app[data-theme="light"] .top-nav a.active {
+  color: #16a34a !important;
+}
+
+.aperture-app[data-theme="light"] .top-nav a.active::after {
+  background: #16a34a !important;
+}
+
+.aperture-app[data-theme="light"] .header-select select {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.aperture-app[data-theme="light"] .reset-view,
+.aperture-app[data-theme="light"] .theme-toggle-btn {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+.aperture-app[data-theme="light"] .reset-view:hover,
+.aperture-app[data-theme="light"] .theme-toggle-btn:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Header Controls & Theme Toggle */
+.aperture-app .theme-toggle-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--market-border);
+  background: var(--market-surface-elevated);
+  color: var(--market-text);
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 150ms ease;
+  flex-shrink: 0;
+}
+
+.aperture-app .theme-toggle-btn:hover {
+  border-color: var(--market-positive);
+  color: var(--market-positive);
+}
+
+.aperture-app .header-select select {
+  max-width: 220px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Butterfly Contagion Summary Anti-Overflow */
+.aperture-app .api-contagion-summary {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
+  gap: 12px !important;
+  padding: 0 !important;
+}
+
+.aperture-app .api-contagion-summary > div {
+  padding: 12px 14px !important;
+  min-height: 80px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+}
+
+.aperture-app .api-contagion-summary strong {
+  font-size: clamp(12px, 1.1vw, 15px) !important;
+  line-height: 1.35 !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+  font-family: inherit !important;
+}
+
+.aperture-app .cascade-stage h3 {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Reverse Stress Solver Clean Controls */
+.aperture-app .reverse-controls {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 16px !important;
+  padding: 8px 16px 16px !important;
+}
+
+.aperture-app .reverse-controls label {
+  flex: 1 1 320px !important;
+  min-width: 240px !important;
+}
+
+.aperture-app .reverse-target-value {
+  padding: 7px 14px !important;
+  background: var(--market-surface-elevated) !important;
+  border: 1px solid var(--market-border) !important;
+  border-radius: 6px !important;
+  font-family: var(--mono) !important;
+  font-size: 13px !important;
+  color: var(--market-text) !important;
+  white-space: nowrap !important;
+}
+
+/* Overview Teasers & Cards */
+.aperture-app .overview-allocation-teaser,
+.aperture-app .overview-compare-teaser {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--market-surface);
+  border: 1px solid var(--market-border);
+  border-radius: 8px;
+  margin-top: 14px;
+}
+
+.aperture-app .overview-allocation-teaser a,
+.aperture-app .overview-compare-teaser a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--market-surface-elevated);
+  border: 1px solid var(--market-border);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.aperture-app .overview-allocation-teaser a:hover,
+.aperture-app .overview-compare-teaser a:hover {
+  border-color: var(--market-positive);
+  color: var(--market-positive);
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1100px) {
+  .aperture-app .app-header {
+    flex-wrap: wrap;
+    padding: 8px 14px;
+    gap: 8px;
+    height: auto;
+    min-height: 56px;
+  }
+  .aperture-app .top-nav {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+    gap: 2px;
+  }
+  .aperture-app .top-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .aperture-app .top-nav a {
+    padding: 6px 12px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .aperture-app .metric-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .aperture-app .comparison-layout {
+    grid-template-columns: 1fr;
+  }
+  .aperture-app .alternative-editor {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--market-border);
+    padding-top: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .aperture-app .metric-strip {
+    grid-template-columns: 1fr;
+  }
+  .aperture-app .header-controls {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .aperture-app .header-select select {
+    max-width: 140px;
+  }
+  .aperture-app .workspace-intro {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .aperture-app .workspace-intro h1 {
+    font-size: 20px;
+  }
+  .aperture-app .overview-allocation-teaser,
+  .aperture-app .overview-compare-teaser {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

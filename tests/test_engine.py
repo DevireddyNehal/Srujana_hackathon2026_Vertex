@@ -963,5 +963,121 @@ def test_api_recommendation_constraints():
     assert inoculation["estimated_friction_inr"] > 0
 
 
+def test_custom_slider_bounds_and_expansion_scenario():
+    """Verify that broad slider parameters (e.g., FX shift of 20%, positive expansion) pass without 422."""
+    from fastapi.testclient import TestClient
+    from main import app
+    import copy
+    client = TestClient(app)
+
+    payload = {
+        "investor_profile": {
+            "horizon_years": 1.0,
+            "risk_tolerance": "Low",
+            "liquidity_need": "High",
+            "target_goal_inr": 1000000.0,
+        },
+        "assets": [
+            {
+                "ticker": "TCS.NS",
+                "name": "Tata Consultancy Services",
+                "sector": "IT",
+                "asset_class": "Equity",
+                "amount_inr": 400000.0,
+                "liquidity_tag": "High",
+                "currency_exposure": "USD_INR",
+            },
+            {
+                "ticker": "INFY.NS",
+                "name": "Infosys Ltd",
+                "sector": "IT",
+                "asset_class": "Equity",
+                "amount_inr": 350000.0,
+                "liquidity_tag": "High",
+                "currency_exposure": "USD_INR",
+            },
+            {
+                "ticker": "HDFCBANK.NS",
+                "name": "HDFC Bank",
+                "sector": "Banking",
+                "asset_class": "Equity",
+                "amount_inr": 150000.0,
+                "liquidity_tag": "High",
+                "currency_exposure": "INR",
+            },
+            {
+                "ticker": "REALTY_LOCKED",
+                "name": "Commercial REIT",
+                "sector": "Real Estate",
+                "asset_class": "Debt",
+                "amount_inr": 100000.0,
+                "liquidity_tag": "Low",
+                "currency_exposure": "INR",
+            },
+        ],
+        "scenario": {
+            "preset_name": "Custom Scenario",
+            "market_decline_pct": 0.0,
+            "interest_rate_change_bps": -100,
+            "sector_shocks": {"IT": 10.0},
+            "currency_inr_usd_shift_pct": 20.0,
+            "custom_ai_prompt": "",
+        },
+        "recommendation_constraints": {
+            "max_loss_tolerance_pct": 5.0,
+            "max_turnover_pct": 25.0,
+            "min_liquidity_pct": 40.0,
+            "hedge_preference": "multi_asset",
+        },
+    }
+
+    # 1. User's exact live scenario must succeed with 200
+    resp = client.post("/api/analyze-scenario", json=payload)
+    assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert data["summary"]["total_value_inr"] == 1000000.0
+    assert data["summary"]["estimated_impact_inr"] > 0
+    alt = data["ai_analysis"]["alternative_portfolio"]
+    tradeoff = alt["tradeoff_explanation"]
+    assert "expansion" in tradeoff.lower()
+    assert "opportunity cost" in tradeoff.lower()
+    # In expansion, no defensive rebalance is triggered: 0 drawdown saved, no trades
+    assert alt["drawdown_saved_inr"] == 0
+    assert alt["actionable_trades"] == []
+    # Capital conservation: proposed assets sum exactly to total_value_inr and 100%
+    assert sum(a["amount_inr"] for a in alt["proposed_assets"]) == 1000000.0
+    assert round(sum(a["weight_pct"] for a in alt["proposed_assets"]), 1) == 100.0
+
+    # 2. Verify capital conservation in contraction scenario with rebalancing
+    contraction_payload = copy.deepcopy(payload)
+    contraction_payload["scenario"]["market_decline_pct"] = -25.0
+    contraction_payload["scenario"]["interest_rate_change_bps"] = 150
+    resp_cont = client.post("/api/analyze-scenario", json=contraction_payload)
+    assert resp_cont.status_code == 200
+    alt_cont = resp_cont.json()["ai_analysis"]["alternative_portfolio"]
+    assert alt_cont["drawdown_saved_inr"] > 0
+    assert len(alt_cont["actionable_trades"]) > 0
+    assert sum(a["amount_inr"] for a in alt_cont["proposed_assets"]) == 1000000.0
+    assert round(sum(a["weight_pct"] for a in alt_cont["proposed_assets"]), 1) == 100.0
+
+    # 3. Extreme slider bounds: max upper & lower ranges
+    extreme_payload = copy.deepcopy(payload)
+    extreme_payload["scenario"]["currency_inr_usd_shift_pct"] = 50.0
+    extreme_payload["scenario"]["interest_rate_change_bps"] = 1000
+    extreme_payload["scenario"]["market_decline_pct"] = -100.0
+    extreme_payload["recommendation_constraints"]["max_loss_tolerance_pct"] = 100.0
+    extreme_payload["recommendation_constraints"]["max_turnover_pct"] = 100.0
+    extreme_payload["recommendation_constraints"]["min_liquidity_pct"] = 100.0
+    resp_extreme = client.post("/api/analyze-scenario", json=extreme_payload)
+    assert resp_extreme.status_code == 200
+
+    # 4. Beyond permissible bounds must return 422
+    invalid_fx = copy.deepcopy(payload)
+    invalid_fx["scenario"]["currency_inr_usd_shift_pct"] = 55.0
+    resp_invalid_fx = client.post("/api/analyze-scenario", json=invalid_fx)
+    assert resp_invalid_fx.status_code == 422
+
+
+
 
 

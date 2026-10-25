@@ -81,7 +81,8 @@ Thumbs.db
 agent/
 skills-lock.json
 
-# TradeFXBook (Isolated Module)
-tradefxbook/
-run_tradefxbook.py
-tests/test_tradefxbook.py
+# SQLite database artifacts
+*.db-wal
+*.db-shm
+*.sqlite3
+

@@ -457,20 +457,55 @@ def generate_alternative_rebalance(
     drags = sorted([a for a in scored_assets if a["loss_inr"] < 0], key=lambda x: x["loss_inr"])
 
     current_loss_inr = current_stressed_val - total_val
-    current_loss_pct = round((current_loss_inr / total_val) * 100.0, 1) if total_val > 0 else 0.0
+    curr_pct = round(((current_stressed_val - total_val) / total_val) * 100.0, 1) if total_val > 0 else 0.0
+
+    # Handle bull-market expansion scenario (positive or non-negative return)
+    if current_loss_inr >= 0:
+        return {
+            "name": "AI Risk-Adjusted Hedge Allocation",
+            "proposed_assets": [
+                {
+                    "ticker": a.get("ticker", "UNKNOWN"),
+                    "sector": a.get("sector", "Other"),
+                    "weight_pct": round((float(a.get("amount_inr", 0)) / total_val) * 100.0, 1),
+                    "amount_inr": int(round(float(a.get("amount_inr", 0)))),
+                }
+                for a in assets
+            ],
+            "stressed_value_median_inr": int(round(current_stressed_val)),
+            "drawdown_saved_inr": 0,
+            "tradeoff_explanation": (
+                f"Dynamic Rebalance (Drawdown Cap: {max_loss_tolerance}%, Turnover: 0.0%): "
+                f"Bull-market expansion scenario (+{curr_pct}% gain). Portfolio experiences positive growth under these assumptions "
+                f"without breaching drawdown limits; maintaining unhedged exposure avoids unnecessary rebalancing friction and eliminates defensive opportunity cost / cash drag."
+            ),
+            "constraints_applied": {
+                "max_loss_tolerance_pct": max_loss_tolerance,
+                "turnover_budget_pct": max_turnover,
+                "actual_turnover_pct": 0.0,
+                "min_liquidity_pct": min_liquidity,
+                "hedge_preference": hedge_pref,
+            },
+            "actionable_trades": [],
+            "estimated_friction_inr": 0,
+            "annual_opportunity_cost_pct": 0.0,
+            "annual_opportunity_cost_inr": 0,
+            "post_rebalance_loss_pct": curr_pct,
+        }
 
     # 3. Compute required rebalance turnover to satisfy loss tolerance
-    target_loss_inr = -total_val * (max_loss_tolerance / 100.0)
-    excess_loss_inr = max(0.0, abs(current_loss_inr) - abs(target_loss_inr))
+    loss_inr = abs(current_loss_inr)
+    target_loss_inr = total_val * (max_loss_tolerance / 100.0)
+    excess_loss_inr = max(0.0, loss_inr - target_loss_inr)
 
     if excess_loss_inr > 0:
         needed_turnover = excess_loss_inr / 0.22
     else:
-        # Already within loss tolerance; perform mild 10% risk-parity / liquidity alignment
-        needed_turnover = total_val * 0.10
+        # Already within loss tolerance; perform mild risk-parity alignment only if drags exist
+        needed_turnover = total_val * 0.10 if drags else 0.0
 
     max_turnover_inr = total_val * (max_turnover / 100.0)
-    turnover_inr = min(max_turnover_inr, max(total_val * 0.05, needed_turnover))
+    turnover_inr = min(max_turnover_inr, max(total_val * 0.05 if drags else 0.0, needed_turnover))
 
     # 4. Generate actionable trim trades
     actionable_trades = []
@@ -496,21 +531,26 @@ def generate_alternative_rebalance(
 
     actual_rebalanced_inr = turnover_inr - remaining_to_trim
     if actual_rebalanced_inr <= 0:
-        actual_rebalanced_inr = total_val * 0.15
+        actual_rebalanced_inr = 0.0
 
-    # 5. Determine defensive hedge allocations based on hedge_preference & min_liquidity
-    liquid_alloc_inr = max(actual_rebalanced_inr * 0.50, total_val * (min_liquidity / 100.0) * 0.50)
-    gold_alloc_inr = max(0.0, actual_rebalanced_inr - liquid_alloc_inr)
+    # 5. Determine defensive hedge allocations strictly funded by trimmed assets
+    liquid_alloc_inr = 0.0
+    gold_alloc_inr = 0.0
 
-    if hedge_pref == "gold_focus":
-        gold_alloc_inr = actual_rebalanced_inr * 0.70
-        liquid_alloc_inr = actual_rebalanced_inr * 0.30
-    elif hedge_pref == "liquid_debt_focus":
-        liquid_alloc_inr = actual_rebalanced_inr * 0.85
-        gold_alloc_inr = actual_rebalanced_inr * 0.15
-    elif hedge_pref == "equity_defensive":
-        gold_alloc_inr = actual_rebalanced_inr * 0.30
-        liquid_alloc_inr = actual_rebalanced_inr * 0.70
+    if actual_rebalanced_inr > 0:
+        if hedge_pref == "gold_focus":
+            gold_alloc_inr = actual_rebalanced_inr * 0.70
+            liquid_alloc_inr = actual_rebalanced_inr * 0.30
+        elif hedge_pref == "liquid_debt_focus":
+            liquid_alloc_inr = actual_rebalanced_inr * 0.85
+            gold_alloc_inr = actual_rebalanced_inr * 0.15
+        elif hedge_pref == "equity_defensive":
+            gold_alloc_inr = actual_rebalanced_inr * 0.30
+            liquid_alloc_inr = actual_rebalanced_inr * 0.70
+        else: # "multi_asset"
+            liq_ratio = max(0.30, min(0.70, (min_liquidity / 100.0) if min_liquidity else 0.50))
+            liquid_alloc_inr = actual_rebalanced_inr * liq_ratio
+            gold_alloc_inr = actual_rebalanced_inr - liquid_alloc_inr
 
     if liquid_alloc_inr > 0:
         actionable_trades.append({
@@ -590,8 +630,6 @@ def generate_alternative_rebalance(
 
     alt_stressed_int = int(round(alt_stressed_val))
     drawdown_saved = max(0, alt_stressed_int - int(round(current_stressed_val)))
-
-    curr_pct = round(((current_stressed_val - total_val) / total_val) * 100.0, 1)
     alt_pct = round(((alt_stressed_val - total_val) / total_val) * 100.0, 1)
 
     # 8. Friction and Opportunity Cost quantification

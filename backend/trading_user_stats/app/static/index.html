@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trading Statistics Overview</title>
+<style>
+:root{--bg:#f6f6f3;--fg:#1c1c1a;--mut:#65655f;--card:#fff;--bd:#dedfd8;--pos:#0b7d57;--neg:#c2352f;--acc:#2b59c3;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--bg:#151513;--fg:#ecece7;--mut:#9b9b93;--card:#1e1e1b;--bd:#34342f;--pos:#3cc695;--neg:#f0716c;--acc:#7da2ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif}
+main{max-width:1180px;margin:0 auto;padding:16px}h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:22px 0 8px}
+.demo{background:#fff3cd;color:#5c4400;border:1px solid #e6c65c;padding:8px 12px;border-radius:8px;margin:10px 0;font-weight:600}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+button,select,input{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:5px 10px}
+button[aria-pressed=true]{background:var(--acc);color:#fff;border-color:var(--acc)}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px}
+.card.big{grid-column:span 1}.k{color:var(--mut);font-size:12px}.v{font-size:22px;font-weight:650;margin:2px 0}.v.sm{font-size:17px}
+.f{color:var(--mut);font-size:11.5px}.pos{color:var(--pos)}.neg{color:var(--neg)}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--bd);border-radius:8px}
+th,td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--bd)}th:first-child,td:first-child{text-align:left}
+#chartwrap{position:relative;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:8px}
+#tip{position:absolute;pointer-events:none;background:var(--fg);color:var(--bg);padding:4px 8px;border-radius:6px;font-size:12px;display:none;white-space:nowrap}
+.msg{padding:30px;text-align:center;color:var(--mut)}.err{color:var(--neg)}
+.legend span{margin-right:14px;font-size:12px;color:var(--mut)}
+@media(prefers-reduced-motion:no-preference){.card{transition:none}}
+</style></head><body><main>
+<h1>Trading Statistics Overview</h1>
+<div id="demo" class="demo" hidden>DEMO DATA &mdash; synthetic, generated records. Not real trading performance. Slippage is simulated.</div>
+<div class="bar">
+  <label>Trader <select id="user" aria-label="Trader"></select></label>
+  <label>Session <select id="session" aria-label="Market session">
+    <option value="all">All sessions</option><option>London</option><option>New York</option>
+    <option>Asian</option><option>Off-hours</option>
+  </select></label>
+  <span role="group" aria-label="Date range" id="ranges"></span>
+  <span id="custom" hidden><label>From <input type="date" id="s"></label> <label>To <input type="date" id="e"></label> <button id="go">Apply</button></span>
+</div>
+<div id="status" class="msg" role="status">Loading…</div>
+<div id="content" hidden>
+  <div class="f" id="meta"></div>
+  <div class="grid" id="hero" style="margin-top:8px"></div>
+  <h2>Daily P&amp;L <span class="f" id="ccy"></span></h2>
+  <div class="legend"><span><b class="pos">&#9632;</b> Profit day</span><span><b class="neg">&#9632;</b> Loss day</span><span>&mdash; Cumulative P&amp;L (right axis)</span><span>Flat/no-trade days shown as zero</span></div>
+  <div id="chartwrap"><div id="chart"></div><div id="tip"></div></div>
+  <details><summary>Data table (monthly totals)</summary><table id="mt"></table></details>
+  <div class="grid" id="dsum" style="margin-top:10px"></div>
+  <h2>Supporting statistics</h2><div class="grid" id="sup"></div>
+  <h2>Transaction costs</h2><div class="grid" id="costs"></div>
+  <h2>Performance by setup</h2><table id="setups"></table>
+  <h2>Performance by session</h2><table id="sessions"></table>
+  <p class="f">Sessions use local exchange hours (London 08–16, New York 08–17, Tokyo 09–17, weekdays; DST-aware), assigned from the trade <b>opening</b> time; overlaps go to the first listed session. Daily P&amp;L groups by <b>closing</b> date in the account time zone.</p>
+</div>
+<script>
+const $=s=>document.querySelector(s);let cur='90d',D=null;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const RANGES=[['7d','7 days'],['30d','30 days'],['90d','90 days'],['ytd','YTD'],['1y','1 year'],['all','All'],['custom','Custom']];
+let ccy='USD';
+const money=(v,d=2)=>v==null?'n/a':new Intl.NumberFormat('en-US',{style:'currency',currency:ccy,maximumFractionDigits:d,minimumFractionDigits:d}).format(v);
+const compact=v=>new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1}).format(v);
+const pc=v=>v==null?'n/a':v.toFixed(2)+'%',num=v=>v==null?'n/a':v.toFixed(2),cls=v=>v>0?'pos':v<0?'neg':'';
+const card=(k,v,f,c='',sm='')=>`<div class="card"><div class="k">${k}</div><div class="v ${sm} ${c}">${v}</div><div class="f">${f}</div></div>`;
+function buttons(){$('#ranges').innerHTML=RANGES.map(([k,l])=>`<button data-k="${k}" aria-pressed="${k===cur}">${l}</button>`).join(' ');
+ document.querySelectorAll('#ranges button').forEach(b=>b.onclick=()=>{cur=b.dataset.k;$('#custom').hidden=cur!=='custom';buttons();if(cur!=='custom')load()})}
+async function load(){
+ const st=$('#status');st.hidden=false;st.className='msg';st.textContent='Loading…';$('#content').hidden=true;
+ const q=new URLSearchParams({user:$('#user').value,range:cur,session:$('#session').value});
+ if(cur==='custom'){q.set('start',$('#s').value);q.set('end',$('#e').value)}
+ try{const r=await fetch(`/api/overview?${q}`);const j=await r.json();if(!r.ok)throw new Error(j.detail||r.status);D=j;render(j)}
+ catch(e){st.className='msg err';st.textContent='Could not load statistics: '+e.message}}
+function render(o){
+ ccy=o.account.currency;$('#status').hidden=true;$('#content').hidden=false;$('#demo').hidden=!o.account.is_demo;
+ $('#meta').textContent=`${o.account.name} · ${o.period.start} → ${o.period.end} (${o.period.calendar_days} days) · closed trades only · time zone ${o.account.timezone} · currency ${ccy}`;
+ const w=o.win_rate,pf=o.profit_factor,dd=o.max_drawdown;
+ $('#hero').innerHTML=
+  card('Net P&amp;L',money(o.net_pnl),'Gross − commission − fees − slippage + signed swap, realized only',cls(o.net_pnl))+
+  card('Win rate',pc(w.value),`${w.wins} wins · ${w.losses} losses · ${w.break_even} break-even. Wins ÷ all closed trades`)+
+  card('Profit factor',pf.value==null?'n/a':num(pf.value),pf.value==null?(pf.unavailable_reason==='no_losing_trades'?'Unavailable: no losing trades':'Unavailable: no closed trades'):`Gross profit ${money(pf.gross_profit,0)} ÷ gross loss ${money(pf.gross_loss,0)}`)+
+  card('Expectancy / trade',money(o.expectancy),'Total net P&amp;L ÷ closed trades',cls(o.expectancy))+
+  card('Max drawdown',money(dd.amount),`${pc(dd.percent)} · realized closed-trade equity from ${money(dd.opening_equity,0)}; excludes intratrade moves`,dd.amount>0?'neg':'')+
+  card('Closed trades',o.closed_trades.toLocaleString(),`${o.frequency.per_week} / week · ${o.frequency.per_month} / month`);
+ chart(o.daily_pnl);
+ const t=o.daily_pnl.totals;
+ $('#dsum').innerHTML=card('Period net P&amp;L',money(t.net_pnl),`${t.closed_trades} closed trades`,cls(t.net_pnl),'sm')+
+  card('Profit / loss / flat days',`${t.profitable_days} / ${t.losing_days} / ${t.flat_days}`,'Flat includes days with no trades','','sm')+
+  card('Best day',t.best_day?money(t.best_day.net_pnl):'n/a',t.best_day?t.best_day.date:'','pos','sm')+
+  card('Worst day',t.worst_day?money(t.worst_day.net_pnl):'n/a',t.worst_day?t.worst_day.date:'','neg','sm');
+ const c=o.consistency,a=o.avg_win_loss,ra=o.rule_adherence;
+ $('#sup').innerHTML=
+  card('Consistency (days)',pc(c.profitable_day_pct),`${c.profitable_days} profitable ÷ ${c.active_days} active days (no-trade days excluded)`,'','sm')+
+  card('Profitable weeks / months',`${c.profitable_weeks}/${c.active_weeks} · ${c.profitable_months}/${c.active_months}`,'Of weeks / months with trades','','sm')+
+  card('Avg win / avg loss',`${money(a.avg_win)} / ${money(a.avg_loss)}`,'Winning-trade mean vs absolute losing-trade mean','','sm')+
+  card('Realized reward-to-risk',num(a.realized_reward_to_risk),'Avg win ÷ avg loss (realized, not planned R:R)','','sm')+
+  card('Rule adherence',pc(ra.percent),ra.evaluated_trades?`${ra.adhered} of ${ra.evaluated_trades} evaluated trades followed plan (unevaluated excluded)`:'Unavailable: no evaluated trades','','sm')+
+  card('Trading frequency',`${o.frequency.per_calendar_day} / day`,`${o.frequency.active_days} active days in period`,'','sm');
+ const k=o.costs;
+ $('#costs').innerHTML=card('Gross P&amp;L',money(k.gross_pnl),'Before costs','','sm')+card('Commission',money(k.commission),'','','sm')+card('Fees',money(k.fees),'','','sm')+
+  card('Slippage',money(k.slippage),'Source: '+esc(k.slippage_source),'','sm')+card('Swap (signed)',money(k.swap_signed),'+ credited, − charged','','sm')+
+  card('Total costs',money(k.total_costs),`Net P&amp;L ${money(k.net_pnl)}`,'','sm');
+ const tbl=(rows)=>`<tr><th>Name</th><th>Trades</th><th>Net P&amp;L</th><th>Win rate</th><th>Profit factor</th></tr>`+(rows.length?rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.trades}</td><td class="${cls(r.net_pnl)}">${money(r.net_pnl)}</td><td>${pc(r.win_rate)}</td><td>${num(r.profit_factor)}</td></tr>`).join(''):'<tr><td colspan=5>No trades in period</td></tr>');
+ $('#setups').innerHTML=tbl(o.setups);$('#sessions').innerHTML=tbl(o.sessions)}
+function chart(d){
+ const days=d.days,n=days.length,el=$('#chart');
+ if(!d.totals.closed_trades){el.innerHTML='<div class="msg">No closed trades in this period.</div>';$('#mt').innerHTML='';return}
+ const W=Math.max(el.clientWidth,320),H=340,m={l:62,r:62,t:12,b:30},iw=W-m.l-m.r,ih=H-m.t-m.b;
+ const nets=days.map(x=>x.net_pnl),cum=days.map(x=>x.cumulative_pnl);
+ const A=Math.max(1,...nets.map(Math.abs)),C=Math.max(1,...cum.map(Math.abs));
+ const y=v=>m.t+ih*(1-(v+A)/(2*A)),y2=v=>m.t+ih*(1-(v+C)/(2*C)),bw=iw/n,z=y(0);
+ let s=`<svg width="${W}" height="${H}" role="img" aria-label="Daily net P&amp;L bar chart, ${d.start} to ${d.end}, total ${money(d.totals.net_pnl)} from ${d.totals.closed_trades} closed trades. Monthly data table below.">`;
+ for(let i=-2;i<=2;i++){const v=A*i/2,yy=y(v),v2=C*i/2;
+  s+=`<line x1="${m.l}" x2="${W-m.r}" y1="${yy}" y2="${yy}" stroke="var(--bd)" ${i===0?'stroke-width="1.5"':''}/><text x="${m.l-6}" y="${yy+4}" text-anchor="end" font-size="11" fill="var(--mut)">${compact(v)}</text><text x="${W-m.r+6}" y="${yy+4}" font-size="11" fill="var(--mut)">${compact(v2)}</text>`}
+ days.forEach((x,i)=>{const h=Math.abs(y(x.net_pnl)-z),px=m.l+i*bw;
+  s+=x.net_pnl===0?`<rect x="${px}" y="${z-.5}" width="${Math.max(bw*.8,.6)}" height="1" fill="var(--mut)"/>`:
+  `<rect x="${px}" y="${x.net_pnl>0?z-h:z}" width="${Math.max(bw*.8,.6)}" height="${Math.max(h,.6)}" fill="${x.net_pnl>0?'var(--pos)':'var(--neg)'}"/>`});
+ s+=`<polyline fill="none" stroke="var(--acc)" stroke-width="1.8" points="${cum.map((v,i)=>`${m.l+(i+.4)*bw},${y2(v)}`).join(' ')}"/>`;
+ for(let i=0;i<6;i++){const k=Math.round(i*(n-1)/5);s+=`<text x="${m.l+k*bw}" y="${H-8}" font-size="11" text-anchor="middle" fill="var(--mut)">${days[k].date}</text>`}
+ s+=`<text x="12" y="${m.t+8}" font-size="11" fill="var(--mut)">${ccy}</text></svg>`;el.innerHTML=s;
+ const tip=$('#tip'),svg=el.querySelector('svg');
+ svg.onmousemove=e=>{const r=svg.getBoundingClientRect(),i=Math.floor((e.clientX-r.left-m.l)/bw);if(i<0||i>=n){tip.style.display='none';return}
+  const x=days[i];tip.style.display='block';tip.textContent=`${x.date} · ${money(x.net_pnl)} · ${x.trades} trades · cum ${money(x.cumulative_pnl)}`;
+  tip.style.left=Math.min(e.clientX-r.left+12,W-260)+'px';tip.style.top='20px'};svg.onmouseleave=()=>tip.style.display='none';
+ const mo={};days.forEach(x=>{const k=x.date.slice(0,7);mo[k]=mo[k]||[0,0];mo[k][0]+=x.net_pnl;mo[k][1]+=x.trades});
+ $('#mt').innerHTML='<tr><th>Month</th><th>Closed trades</th><th>Net P&amp;L</th></tr>'+Object.entries(mo).map(([k,v])=>`<tr><td>${k}</td><td>${v[1]}</td><td class="${cls(v[0])}">${money(v[0])}</td></tr>`).join('')}
+(async()=>{buttons();try{const a=await (await fetch('/api/accounts')).json();
+ $('#user').innerHTML=a.map(x=>`<option value="${esc(x.user_id)}">${esc(x.name)}</option>`).join('');$('#user').onchange=load;
+$('#session').onchange=load;$('#go').onclick=load;window.onresize=()=>D&&chart(D.daily_pnl);load()}catch(e){$('#status').textContent='Failed to load accounts: '+e.message}})();
+</script></main></body></html>

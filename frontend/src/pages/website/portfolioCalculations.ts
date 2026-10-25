@@ -90,6 +90,8 @@ export interface HedgedScenarioResult {
   hedgedReturnPct: number;
   hedgedEndingValue: number;
   drawdownSavedInr: number;
+  isExpansion?: boolean;
+  statusMessage?: string;
 }
 
 export function calculateHedgedScenario(
@@ -109,6 +111,19 @@ export function calculateHedgedScenario(
   }));
 
   const baselinePnl = contributions.reduce((sum, h) => sum + h.pnl, 0);
+  const isExpansion = baselinePnl >= 0;
+
+  if (isExpansion) {
+    return {
+      hedgedPnl: baselinePnl,
+      hedgedReturnPct: (baselinePnl / totalMarketVal) * 100,
+      hedgedEndingValue: totalMarketVal + baselinePnl,
+      drawdownSavedInr: 0,
+      isExpansion: true,
+      statusMessage: "Bull market expansion · No defensive hedge triggered",
+    };
+  }
+
   const drags = contributions.filter((c) => c.shock < 0).sort((a, b) => a.shock - b.shock);
   const totalDragVal = drags.reduce((sum, d) => sum + d.marketValue, 0);
 
@@ -137,11 +152,17 @@ export function calculateHedgedScenario(
   const hedgedReturnPct = (hedgedPnl / totalMarketVal) * 100;
   const hedgedEndingValue = totalMarketVal + hedgedPnl;
 
+  const statusMessage = drawdownSaved > 0
+    ? `Protected downside with ${turnoverBudgetPct}% defensive buffer`
+    : "Baseline stress level aligns with current asset mix";
+
   return {
     hedgedPnl,
     hedgedReturnPct,
     hedgedEndingValue,
     drawdownSavedInr: Math.round(drawdownSaved),
+    isExpansion: false,
+    statusMessage,
   };
 }
 

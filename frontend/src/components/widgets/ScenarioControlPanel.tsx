@@ -202,8 +202,8 @@ export const ScenarioControlPanel: React.FC<ScenarioControlPanelProps> = ({
           </span>
           <input
             type="range"
-            min="-15"
-            max="15"
+            min="-20"
+            max="20"
             step="1"
             value={scenario.currency_inr_usd_shift_pct}
             onChange={(event) =>
@@ -217,8 +217,8 @@ export const ScenarioControlPanel: React.FC<ScenarioControlPanelProps> = ({
             className="w-full accent-indigo-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg"
           />
           <span className="flex justify-between text-[10px] text-slate-400">
-            <span>-15%</span>
-            <span>+15%</span>
+            <span>-20%</span>
+            <span>+20%</span>
           </span>
         </label>
 
