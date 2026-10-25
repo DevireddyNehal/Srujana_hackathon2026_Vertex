@@ -205,7 +205,7 @@ def test_ai_agent_insights_and_trilemma():
     # Verify alternative portfolio details & opportunity cost
     alt = insights["alternative_portfolio"]
     assert alt["name"] == "AI Risk-Adjusted Hedge Allocation"
-    assert len(alt["proposed_assets"]) == 4
+    assert len(alt["proposed_assets"]) >= 4
     assert alt["drawdown_saved_inr"] > 0
     assert "opportunity cost" in alt["tradeoff_explanation"].lower()
 
@@ -855,6 +855,113 @@ def test_contagion_inoculation_resilient_and_top_level_fda():
     data_oil_fda = resp_oil_fda.json()
     assert data_oil_fda["is_false_diversification_detected"] is True
     assert "Crude Oil" in data_oil_fda["upstream_dependency"]
+
+
+def test_parametric_constraint_driven_recommendation():
+    """Verify constraint-driven portfolio optimizer respects user parameters."""
+    portfolio = sample_portfolio()
+    shocks = sample_shocks()
+    shocks["recommendation_constraints"] = {
+        "max_loss_tolerance_pct": 5.0,
+        "max_turnover_pct": 15.0,
+        "min_liquidity_pct": 30.0,
+        "hedge_preference": "gold_focus",
+    }
+
+    res = run_portfolio_scenario(portfolio, shocks)
+    alt = res["alternative_portfolio"]
+
+    assert alt["name"] == "AI Risk-Adjusted Hedge Allocation"
+    assert "constraints_applied" in alt
+    constraints = alt["constraints_applied"]
+    assert constraints["max_loss_tolerance_pct"] == 5.0
+    assert constraints["turnover_budget_pct"] == 15.0
+    assert constraints["min_liquidity_pct"] == 30.0
+    assert constraints["hedge_preference"] == "gold_focus"
+    assert constraints["actual_turnover_pct"] <= 15.0
+
+    # Verify actionable trades exist with TRIM and ALLOCATE
+    assert "actionable_trades" in alt
+    trades = alt["actionable_trades"]
+    assert len(trades) >= 2
+    actions = [t["action"] for t in trades]
+    assert "TRIM" in actions
+    assert "ALLOCATE" in actions
+
+    # Verify friction and opportunity cost quantification
+    assert alt["estimated_friction_inr"] > 0
+    assert alt["annual_opportunity_cost_pct"] > 0
+    assert alt["annual_opportunity_cost_inr"] > 0
+    assert "incurring ~₹" in alt["tradeoff_explanation"]
+    assert "opportunity cost" in alt["tradeoff_explanation"].lower()
+
+
+def test_api_recommendation_constraints():
+    """Verify /api/analyze-scenario and /api/contagion/simulate accept recommendation_constraints."""
+    main_mod = pytest.importorskip("main")
+    from fastapi.testclient import TestClient
+    client = TestClient(main_mod.app)
+
+    # 1. Test /api/analyze-scenario with custom constraints
+    req_payload = {
+        "investor_profile": {
+            "horizon_years": 2.0,
+            "risk_tolerance": "Low",
+            "liquidity_need": "High",
+            "target_goal_inr": 1200000.0,
+        },
+        "assets": [
+            {"ticker": "TCS.NS", "name": "TCS", "sector": "IT", "asset_class": "Equity", "amount_inr": 500000.0, "liquidity_tag": "High", "currency_exposure": "USD_INR"},
+            {"ticker": "HDFCBANK.NS", "name": "HDFC", "sector": "Banking", "asset_class": "Equity", "amount_inr": 500000.0, "liquidity_tag": "High", "currency_exposure": "INR"},
+        ],
+        "scenario": {
+            "preset_name": "Tech Selloff",
+            "market_decline_pct": -10.0,
+            "interest_rate_change_bps": 50,
+            "sector_shocks": {"IT": -20.0},
+            "currency_inr_usd_shift_pct": 0.0,
+            "custom_ai_prompt": "",
+        },
+        "recommendation_constraints": {
+            "max_loss_tolerance_pct": 6.0,
+            "max_turnover_pct": 20.0,
+            "min_liquidity_pct": 25.0,
+            "hedge_preference": "liquid_debt_focus",
+        },
+    }
+    resp = client.post("/api/analyze-scenario", json=req_payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    alt = data["ai_analysis"]["alternative_portfolio"]
+    assert "constraints_applied" in alt
+    assert alt["constraints_applied"]["max_loss_tolerance_pct"] == 6.0
+    assert alt["drawdown_saved_inr"] > 0
+
+    # 2. Test /api/contagion/simulate with recommendation_constraints
+    resp_contagion = client.post(
+        "/api/contagion/simulate",
+        json={
+            "scenario_id": "us_tech_spending_freeze",
+            "portfolio": {
+                "assets": [
+                    {"ticker": "TCS.NS", "name": "TCS", "amount_inr": 600000, "weight": 0.60},
+                    {"ticker": "INFY.NS", "name": "Infosys", "amount_inr": 400000, "weight": 0.40},
+                ]
+            },
+            "recommendation_constraints": {
+                "max_turnover_pct": 30.0,
+                "hedge_preference": "gold_focus",
+            },
+        },
+    )
+    assert resp_contagion.status_code == 200
+    contagion_data = resp_contagion.json()
+    inoculation = contagion_data["stages"][3]["inoculation_strategy"]
+    assert inoculation["is_hedging_needed"] is True
+    assert inoculation["constraints_applied"]["max_turnover_pct"] == 30.0
+    assert inoculation["hedge_instrument"] == "Nippon India Gold ETF"
+    assert inoculation["estimated_friction_inr"] > 0
+
 
 
 

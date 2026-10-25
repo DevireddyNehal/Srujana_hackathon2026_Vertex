@@ -411,11 +411,14 @@ def _compute_contagion_inoculation(
     total_portfolio_value: float,
     current_loss_inr: float,
     shock_id: str,
+    recommendation_constraints: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Computes an optimal defensive immunization allocation to inoculate the portfolio
     against this specific macro contagion pathway.
+    Supports parametric user constraints: max_turnover_pct, hedge_preference, and friction quantification.
     """
+    recommendation_constraints = recommendation_constraints or {}
     if current_loss_inr >= 0:
         current_return_pct = round((current_loss_inr / total_portfolio_value * 100.0), 2) if total_portfolio_value > 0 else 0.0
         return {
@@ -435,17 +438,19 @@ def _compute_contagion_inoculation(
     drags = [h for h in affected_holdings if h["portfolio_impact_inr"] < 0]
     hedges = [h for h in affected_holdings if h["portfolio_impact_inr"] >= 0]
 
-    # Target 60% drawdown reduction by trimming top 2 drags and allocating to defensive safe-haven
-    rebalance_pct = 20.0  # Move 20% from high-risk drag to hedge
+    # Resolve dynamic turnover budget
+    max_turnover = float(recommendation_constraints.get("max_turnover_pct") or 20.0)
+    rebalance_pct = max(5.0, min(max_turnover, 50.0))
     rebalance_inr = total_portfolio_value * (rebalance_pct / 100.0)
 
-    # Determine recommended hedge instrument based on shock type
-    if "oil" in shock_id:
+    # Determine recommended hedge instrument based on shock type or user preference
+    hedge_override = recommendation_constraints.get("hedge_preference")
+    if hedge_override == "gold_focus" or (not hedge_override and "oil" in shock_id):
         hedge_ticker = "GOLDBEES.NS"
         hedge_name = "Nippon India Gold ETF"
         hedge_expected_return = 7.0
         rationale = "Gold exhibits a +0.35 beta during geopolitical oil shocks, serving as an inflation & currency hedge."
-    elif "rates" in shock_id:
+    elif hedge_override == "liquid_debt_focus" or (not hedge_override and "rates" in shock_id):
         hedge_ticker = "LIQUIDBEES.NS"
         hedge_name = "Nippon India Liquid ETF (TREPS)"
         hedge_expected_return = 1.2
@@ -457,9 +462,15 @@ def _compute_contagion_inoculation(
         rationale = "Capital preservation buffer insulates against equity multiple contraction and earnings guidance downgrades."
 
     # Compute simulated post-hedge impact
-    drawdown_saved_inr = int(round(abs(current_loss_inr) * 0.62))
+    drawdown_saved_inr = int(round(abs(current_loss_inr) * 0.62 * (rebalance_pct / 20.0)))
+    drawdown_saved_inr = min(drawdown_saved_inr, int(round(abs(current_loss_inr) * 0.90)))
     new_stressed_loss_inr = current_loss_inr + drawdown_saved_inr
     new_loss_pct = round((new_stressed_loss_inr / total_portfolio_value) * 100.0, 1) if total_portfolio_value > 0 else 0.0
+
+    # Friction and Opportunity Cost calculations
+    friction_inr = int(round(rebalance_inr * 0.0215))
+    opp_cost_pct = round((rebalance_pct / 100.0) * 6.0, 1)
+    annual_opp_cost_inr = int(round(total_portfolio_value * (opp_cost_pct / 100.0)))
 
     proposed_rebalance = []
     # Trim from largest loser
@@ -490,9 +501,17 @@ def _compute_contagion_inoculation(
         "drawdown_saved_inr": drawdown_saved_inr,
         "post_hedge_impact_pct": new_loss_pct,
         "opportunity_cost": (
-            "Allocating to defensive assets reduces drawdown during stress events, "
-            "but sacrifices approximately 1.5% - 2.5% annualized alpha during rapid bull market expansions."
+            f"Allocating {rebalance_pct}% to defensive safe-haven ({hedge_name}) reduces drawdown during stress events by ₹{drawdown_saved_inr:,}, "
+            f"at an estimated tax/trading friction of ₹{friction_inr:,} and ~{opp_cost_pct}% (₹{annual_opp_cost_inr:,}/yr) "
+            f"in sacrificed bull-market alpha."
         ),
+        "constraints_applied": {
+            "max_turnover_pct": rebalance_pct,
+            "hedge_preference": hedge_override or "auto_by_shock",
+        },
+        "estimated_friction_inr": friction_inr,
+        "annual_opportunity_cost_pct": opp_cost_pct,
+        "annual_opportunity_cost_inr": annual_opp_cost_inr,
         "proposed_rebalance": proposed_rebalance,
     }
 
@@ -503,7 +522,8 @@ def _compute_contagion_inoculation(
 def simulate_butterfly_shock(
     scenario_id: str,
     portfolio: Dict[str, Any],
-    custom_magnitude_pct: Optional[float] = None
+    custom_magnitude_pct: Optional[float] = None,
+    recommendation_constraints: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Executes dynamic multi-hop shock propagation through the Economic Dependency Graph.
@@ -729,6 +749,7 @@ def simulate_butterfly_shock(
         total_portfolio_value=total_portfolio_value,
         current_loss_inr=total_dollar_impact,
         shock_id=scenario_id,
+        recommendation_constraints=recommendation_constraints,
     )
 
     # False Diversification Trap Analysis

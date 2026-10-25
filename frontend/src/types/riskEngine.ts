@@ -18,6 +18,13 @@ export interface InvestorProfileRequest {
   target_goal_inr: number;
 }
 
+export interface RecommendationConstraints {
+  max_loss_tolerance_pct?: number;
+  max_turnover_pct?: number;
+  min_liquidity_pct?: number;
+  hedge_preference?: "multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive";
+}
+
 export interface ScenarioRiskRequest {
   investor_profile: InvestorProfileRequest;
   assets: ScenarioRiskAsset[];
@@ -29,6 +36,7 @@ export interface ScenarioRiskRequest {
     currency_inr_usd_shift_pct: number;
     custom_ai_prompt: string;
   };
+  recommendation_constraints?: RecommendationConstraints;
 }
 
 export interface ScenarioRiskResponse {
@@ -76,6 +84,25 @@ export interface ScenarioRiskResponse {
       stressed_value_median_inr: number;
       drawdown_saved_inr: number;
       tradeoff_explanation: string;
+      constraints_applied?: {
+        max_loss_tolerance_pct: number;
+        turnover_budget_pct: number;
+        actual_turnover_pct: number;
+        min_liquidity_pct: number;
+        hedge_preference: string;
+      };
+      actionable_trades?: Array<{
+        ticker: string;
+        name: string;
+        action: "TRIM" | "ALLOCATE";
+        amount_change_inr: number;
+        weight_change_pct: number;
+        reason: string;
+      }>;
+      estimated_friction_inr?: number;
+      annual_opportunity_cost_pct?: number;
+      annual_opportunity_cost_inr?: number;
+      post_rebalance_loss_pct?: number;
     };
   };
 }
@@ -143,6 +170,12 @@ export interface ContagionStage {
     drawdown_saved_inr: number;
     post_hedge_impact_pct: number;
     opportunity_cost: string;
+    friction_inr?: number;
+    constraints_applied?: {
+      turnover_budget_pct: number;
+      actual_turnover_pct: number;
+      hedge_preference: string;
+    };
     proposed_rebalance: Array<{
       ticker: string;
       name: string;
@@ -157,6 +190,7 @@ export interface ContagionSimulationRequest {
   scenario_id: string;
   custom_magnitude_pct: number;
   portfolio: { assets: RiskAsset[] };
+  recommendation_constraints?: RecommendationConstraints;
 }
 
 export interface ContagionSimulationResponse {

@@ -10,14 +10,17 @@ import {
 import {
   calculateMetrics,
   calculateScenario,
+  calculateHedgedScenario,
   calculateWarnings,
   formatPercent,
   normalizeHoldings,
+  type HedgedScenarioResult,
 } from "./portfolioCalculations";
 import {
   classCorrelations,
   portfolios,
   scenarios,
+  type Holding,
   type Portfolio,
   type Scenario,
 } from "./portfolioData";
@@ -104,6 +107,9 @@ interface SavedDashboardState {
   horizon: number;
   liquidityNeed: number;
   lossLimit: number;
+  maxTurnoverPct?: number;
+  minLiquidityPct?: number;
+  hedgePreference?: "multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive";
 }
 
 function currentPage(): PageName {
@@ -145,7 +151,12 @@ function loadSavedState(): SavedDashboardState | null {
       liquidityNeed: Number.isFinite(saved.liquidityNeed)
         ? Math.max(0, saved.liquidityNeed!)
         : demoLiquidityNeed(portfolio),
-      lossLimit: [10, 15, 20, 30].includes(saved.lossLimit ?? -1) ? saved.lossLimit! : 15,
+      lossLimit: [5, 10, 15, 20, 25, 30].includes(saved.lossLimit ?? -1) ? saved.lossLimit! : 15,
+      maxTurnoverPct: Number.isFinite(saved.maxTurnoverPct) ? saved.maxTurnoverPct! : 25,
+      minLiquidityPct: Number.isFinite(saved.minLiquidityPct) ? saved.minLiquidityPct! : 20,
+      hedgePreference: ["multi_asset", "gold_focus", "liquid_debt_focus", "equity_defensive"].includes(saved.hedgePreference ?? "")
+        ? (saved.hedgePreference as any)
+        : "multi_asset",
     };
   } catch (error) {
     console.error("Could not read saved Vertex dashboard settings.", error);
@@ -659,6 +670,7 @@ function PerformancePanel({
   currency,
   scenario,
   scenarioResult,
+  hedgedScenarioResult,
 }: {
   portfolio: Portfolio;
   weights: number[];
@@ -666,6 +678,7 @@ function PerformancePanel({
   currency: Currency;
   scenario: Scenario | null;
   scenarioResult: ReturnType<typeof calculateScenario> | null;
+  hedgedScenarioResult?: HedgedScenarioResult | null;
 }) {
   const { ref: chartRef, isInView: chartIsInView } = useChartInView<SVGSVGElement>();
   const { ref: drawdownRef, isInView: drawdownIsInView } = useChartInView<SVGSVGElement>();
@@ -683,7 +696,13 @@ function PerformancePanel({
         scenarioResult.endingValue,
       ]
     : [];
-  const plottedValues = [...displayValues, ...scenarioValues];
+  const hedgedValues = scenarioResult && hedgedScenarioResult
+    ? [
+        displayValues.at(-1) ?? portfolio.marketValue,
+        hedgedScenarioResult.hedgedEndingValue,
+      ]
+    : [];
+  const plottedValues = [...displayValues, ...scenarioValues, ...hedgedValues];
   const minValue = Math.min(...plottedValues) * 0.96;
   const maxValue = Math.max(...plottedValues) * 1.035;
   const historyPath = pathFor(displayValues, historyWidth, height, minValue, maxValue);
@@ -708,6 +727,15 @@ function PerformancePanel({
         maxValue,
       )
     : "";
+  const hedgedPath = hedgedValues.length
+    ? pathFor(
+        hedgedValues,
+        projectionWidth,
+        height,
+        minValue,
+        maxValue,
+      )
+    : "";
   const yTicks = [0, 1, 2, 3].map((tick) => maxValue - ((maxValue - minValue) * tick) / 3);
 
   return (
@@ -721,7 +749,10 @@ function PerformancePanel({
       </div>
       <div className="chart-legend">
         <span><i className="legend-line historic-line" /> Historical observation</span>
-        {scenario && <span><i className="legend-line simulated-line" /> Hypothetical simulation</span>}
+        {scenario && <span><i className="legend-line simulated-line" /> Baseline shock</span>}
+        {scenario && hedgedScenarioResult && (
+          <span><i className="legend-line" style={{ background: "#2EAF7D", display: "inline-block", width: "16px", height: "3px", marginRight: "6px", verticalAlign: "middle" }} /> Hedged rebalance</span>
+        )}
         <span className="chart-unit">Value ({currency})</span>
       </div>
       <div className="performance-chart">
@@ -746,7 +777,7 @@ function PerformancePanel({
               className="chart-gridline"
             />
           ))}
-          <g key={`${historyPath}-${scenarioPath}`}>
+          <g key={`${historyPath}-${scenarioPath}-${hedgedPath}`}>
             <path
               d={historyPath}
               pathLength="1"
@@ -782,6 +813,27 @@ function PerformancePanel({
                   className={`scenario-point ${scenarioResult.returnPct >= 0 ? "market-up" : "market-down"}`}
                 >
                   <title>{`Hypothetical scenario value: ${money(scenarioResult.endingValue, currency)}`}</title>
+                </circle>
+              </>
+            )}
+            {scenario && hedgedScenarioResult && (
+              <>
+                <path
+                  d={hedgedPath}
+                  pathLength="1"
+                  stroke="#2EAF7D"
+                  strokeWidth="2.5"
+                  strokeDasharray="4 3"
+                  fill="none"
+                  transform={`translate(${historyWidth}, 0)`}
+                />
+                <circle
+                  cx={width}
+                  cy={height - ((hedgedScenarioResult.hedgedEndingValue - minValue) / Math.max(maxValue - minValue, 1)) * height}
+                  r="5"
+                  fill="#2EAF7D"
+                >
+                  <title>{`Hedged rebalance scenario value: ${money(hedgedScenarioResult.hedgedEndingValue, currency)}`}</title>
                 </circle>
               </>
             )}
@@ -849,17 +901,37 @@ function PerformancePanel({
 function ScenarioPanel({
   activeScenario,
   scenarioResult,
+  hedgedScenarioResult,
   onSelect,
   onCustomChange,
   portfolio,
   currency,
+  lossLimit,
+  onLossLimitChange,
+  maxTurnoverPct,
+  onMaxTurnoverPctChange,
+  minLiquidityPct,
+  onMinLiquidityPctChange,
+  hedgePreference,
+  onHedgePreferenceChange,
+  onSubmitRebalance,
 }: {
   activeScenario: Scenario | null;
   scenarioResult: ReturnType<typeof calculateScenario> | null;
+  hedgedScenarioResult?: HedgedScenarioResult | null;
   onSelect: (scenario: Scenario | null) => void;
   onCustomChange: (key: "marketPct" | "rateBps" | "technologyPct" | "fxPct", value: number) => void;
   portfolio: Portfolio;
   currency: Currency;
+  lossLimit?: number;
+  onLossLimitChange?: (val: number) => void;
+  maxTurnoverPct?: number;
+  onMaxTurnoverPctChange?: (val: number) => void;
+  minLiquidityPct?: number;
+  onMinLiquidityPctChange?: (val: number) => void;
+  hedgePreference?: "multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive";
+  onHedgePreferenceChange?: (val: "multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive") => void;
+  onSubmitRebalance?: () => void;
 }) {
   const canUseFx = portfolio.holdings.some((holding) => holding.fxExposure > 0);
   const isCustom = activeScenario?.id === "custom";
@@ -902,6 +974,70 @@ function ScenarioPanel({
           <RangeControl label="Technology sector" value={custom.technologyPct} min={-40} max={10} suffix="%" onChange={(value) => onCustomChange("technologyPct", value)} />
           <RangeControl label={`FX vs ${currency}`} value={custom.fxPct} min={-20} max={20} suffix="%" onChange={(value) => onCustomChange("fxPct", value)} disabled={!canUseFx} />
           {!canUseFx && <p className="microcopy">This portfolio has no foreign-currency exposure; FX changes have no modeled effect.</p>}
+
+          <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px dashed var(--line)" }}>
+            <span className="eyebrow" style={{ fontSize: "10px", letterSpacing: "0.06em", color: "var(--muted)" }}>Recommendation & Rebalance Controls</span>
+          </div>
+          {onLossLimitChange && lossLimit !== undefined && (
+            <RangeControl label="Max drawdown tolerance" value={lossLimit} min={5} max={30} suffix="%" onChange={onLossLimitChange} />
+          )}
+          {onMaxTurnoverPctChange && maxTurnoverPct !== undefined && (
+            <RangeControl label="Rebalance turnover budget" value={maxTurnoverPct} min={5} max={50} suffix="%" onChange={onMaxTurnoverPctChange} />
+          )}
+          {onMinLiquidityPctChange && minLiquidityPct !== undefined && (
+            <RangeControl label="Min liquidity floor" value={minLiquidityPct} min={5} max={40} suffix="%" onChange={onMinLiquidityPctChange} />
+          )}
+          {onHedgePreferenceChange && hedgePreference && (
+            <label className="range-control" style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <span><span>Defensive hedge focus</span><strong>{hedgePreference.replace("_", " ")}</strong></span>
+              <select
+                value={hedgePreference}
+                onChange={(event) => onHedgePreferenceChange(event.target.value as any)}
+                style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--panel)", color: "var(--ink)", fontSize: "11px" }}
+              >
+                <option value="multi_asset">Multi-Asset (Cash + Gold)</option>
+                <option value="gold_focus">Gold Focus (GOLDBEES)</option>
+                <option value="liquid_debt_focus">Liquid Debt Focus (LIQUIDBEES)</option>
+                <option value="equity_defensive">Defensive Equity (Low Beta)</option>
+              </select>
+            </label>
+          )}
+
+          <button
+            type="button"
+            className="action-button primary"
+            style={{
+              width: "100%",
+              marginTop: "14px",
+              padding: "10px 14px",
+              fontWeight: 600,
+              fontSize: "12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              cursor: "pointer",
+              borderRadius: "6px",
+              background: "var(--accent, #0052FF)",
+              color: "#fff",
+              border: "none",
+              boxShadow: "0 2px 8px rgba(0, 82, 255, 0.25)",
+            }}
+            onClick={() => {
+              if (onSubmitRebalance) {
+                onSubmitRebalance();
+              } else {
+                const panel = document.getElementById("risk-summary-engine");
+                if (panel) {
+                  panel.scrollIntoView({ behavior: "smooth" });
+                  const runBtn = panel.querySelector<HTMLButtonElement>(".api-run-button");
+                  runBtn?.click();
+                }
+              }
+            }}
+          >
+            ⚡ Submit &amp; Run Full Rebalance Analysis ↓
+          </button>
         </div>
       )}
       {activeScenario && scenarioResult ? (
@@ -911,12 +1047,42 @@ function ScenarioPanel({
           aria-live="polite"
         >
           <div className="result-topline"><span>Estimated portfolio impact</span><span className="hypothetical-badge">SIMULATED</span></div>
+
+          {hedgedScenarioResult ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", margin: "10px 0" }}>
+              <div style={{ padding: "10px", background: "rgba(224, 86, 36, 0.08)", borderRadius: "8px", border: "1px solid rgba(224, 86, 36, 0.2)" }}>
+                <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.05em", color: "var(--muted)", marginBottom: "4px" }}>UNHEDGED BASELINE</div>
+                <div className="result-value negative-value" style={{ fontSize: "18px", lineHeight: "1.2" }}>
+                  {signedMoney(scenarioResult.pnl, currency)}
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "3px" }}>
+                  {formatPercent(scenarioResult.returnPct)} · ending {money(scenarioResult.endingValue, currency, true)}
+                </div>
+              </div>
+
+              <div style={{ padding: "10px", background: "rgba(46, 175, 125, 0.08)", borderRadius: "8px", border: "1px solid rgba(46, 175, 125, 0.25)" }}>
+                <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.05em", color: "#2EAF7D", marginBottom: "4px" }}>
+                  WITH {maxTurnoverPct ?? 15}% HEDGE
+                </div>
+                <div className="result-value" style={{ fontSize: "18px", lineHeight: "1.2", color: "#2EAF7D" }}>
+                  {signedMoney(hedgedScenarioResult.hedgedPnl, currency)}
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--ink)", marginTop: "3px", fontWeight: 500 }}>
+                  {formatPercent(hedgedScenarioResult.hedgedReturnPct)} · <strong style={{ color: "#2EAF7D" }}>+{money(hedgedScenarioResult.drawdownSavedInr, currency, true)} saved!</strong>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
               <div className={`result-value ${scenarioResult.pnl < 0 ? "negative-value" : "positive-value"}`}>
                 {signedMoney(scenarioResult.pnl, currency)}
               </div>
-          <div className="result-subline">{formatPercent(scenarioResult.returnPct)} <span>·</span> ending value {money(scenarioResult.endingValue, currency, true)}</div>
-          <div className="loss-meter"><span style={{ width: `${Math.min(lossPct * 2.6, 100)}%` }} /></div>
-          <div className="meter-caption"><span>Estimated loss severity</span><span>{formatPercent(lossPct)}</span></div>
+              <div className="result-subline">{formatPercent(scenarioResult.returnPct)} <span>·</span> ending value {money(scenarioResult.endingValue, currency, true)}</div>
+            </>
+          )}
+
+          <div className="loss-meter"><span style={{ width: `${Math.min((hedgedScenarioResult ? Math.abs(Math.min(hedgedScenarioResult.hedgedReturnPct, 0)) : lossPct) * 2.6, 100)}%` }} /></div>
+          <div className="meter-caption"><span>Estimated loss severity</span><span>{formatPercent(hedgedScenarioResult ? Math.abs(Math.min(hedgedScenarioResult.hedgedReturnPct, 0)) : lossPct)}</span></div>
           <div className="contributors">
             <div className="contributors-title">Largest modeled loss contributors</div>
             {worstContributors.length ? worstContributors.map((item) => (
@@ -926,7 +1092,7 @@ function ScenarioPanel({
               </div>
             )) : <p className="microcopy">No negative holding-level impact under these assumptions.</p>}
           </div>
-          <div className="assumption-note"><strong>Model assumptions</strong><span>Equity beta · bond duration · stated FX exposure. No hedging, transaction costs, or cross-factor interactions included.</span></div>
+          <div className="assumption-note"><strong>Model assumptions</strong><span>Equity beta · bond duration · stated FX exposure. {hedgedScenarioResult ? `Hedged with ${maxTurnoverPct}% turnover into defensive assets.` : "No hedging, transaction costs, or cross-factor interactions included."}</span></div>
         </div>
       ) : (
         <div className="scenario-idle">
@@ -988,6 +1154,10 @@ function DiagnosticsPanel({
   onLossLimitChange,
   scenarioResult,
   currency,
+  maxTurnoverPct,
+  onMaxTurnoverPctChange,
+  hedgePreference,
+  onHedgePreferenceChange,
 }: {
   portfolio: Portfolio;
   weights: number[];
@@ -1001,16 +1171,24 @@ function DiagnosticsPanel({
   onLossLimitChange: (value: number) => void;
   scenarioResult: ReturnType<typeof calculateScenario> | null;
   currency: Currency;
+  maxTurnoverPct?: number;
+  onMaxTurnoverPctChange?: (value: number) => void;
+  hedgePreference?: "multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive";
+  onHedgePreferenceChange?: (value: "multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive") => void;
 }) {
   const [draftRiskTolerance, setDraftRiskTolerance] = useState(riskTolerance);
   const [draftHorizon, setDraftHorizon] = useState(horizon);
   const [draftLiquidityNeed, setDraftLiquidityNeed] = useState(liquidityNeed);
   const [draftLossLimit, setDraftLossLimit] = useState(lossLimit);
+  const [draftMaxTurnover, setDraftMaxTurnover] = useState(maxTurnoverPct ?? 25);
+  const [draftHedgePreference, setDraftHedgePreference] = useState(hedgePreference ?? "multi_asset");
   const hasUnappliedChanges =
     draftRiskTolerance !== riskTolerance ||
     draftHorizon !== horizon ||
     draftLiquidityNeed !== liquidityNeed ||
-    draftLossLimit !== lossLimit;
+    draftLossLimit !== lossLimit ||
+    (maxTurnoverPct !== undefined && draftMaxTurnover !== maxTurnoverPct) ||
+    (hedgePreference !== undefined && draftHedgePreference !== hedgePreference);
   const { holdings } = normalizeHoldings(portfolio, weights);
   const warnings = calculateWarnings(holdings, riskTolerance, horizon, liquidityNeed, scenarioResult, lossLimit);
 
@@ -1020,6 +1198,8 @@ function DiagnosticsPanel({
     onHorizonChange(draftHorizon);
     onLiquidityNeedChange(draftLiquidityNeed);
     onLossLimitChange(draftLossLimit);
+    onMaxTurnoverPctChange?.(draftMaxTurnover);
+    onHedgePreferenceChange?.(draftHedgePreference);
   };
 
   return (
@@ -1057,6 +1237,24 @@ function DiagnosticsPanel({
           <label>Loss review threshold
             <select value={draftLossLimit} onChange={(event) => setDraftLossLimit(Number(event.target.value))}>
               <option value={10}>10% loss</option><option value={15}>15% loss</option><option value={20}>20% loss</option><option value={30}>30% loss</option>
+            </select>
+          </label>
+          <label>Turnover budget
+            <select value={draftMaxTurnover} onChange={(event) => setDraftMaxTurnover(Number(event.target.value))}>
+              <option value={10}>10% capital turnover</option>
+              <option value={15}>15% capital turnover</option>
+              <option value={20}>20% capital turnover</option>
+              <option value={25}>25% capital turnover</option>
+              <option value={35}>35% capital turnover</option>
+              <option value={50}>50% capital turnover</option>
+            </select>
+          </label>
+          <label>Defensive hedge universe
+            <select value={draftHedgePreference} onChange={(event) => setDraftHedgePreference(event.target.value as any)}>
+              <option value="multi_asset">Multi-Asset (Cash + Gold)</option>
+              <option value="gold_focus">Gold Focus (GOLDBEES)</option>
+              <option value="liquid_debt_focus">Liquid Debt Focus (LIQUIDBEES)</option>
+              <option value="equity_defensive">Defensive Equity (Low Beta)</option>
             </select>
           </label>
         </div>
@@ -1198,9 +1396,13 @@ function apiAssets(portfolio: Portfolio, weights: number[]) {
 function RiskSummaryEngine({
   payload,
   currency,
+  onApplyRebalance,
+  rebalanceAdopted,
 }: {
   payload: ScenarioRiskRequest;
   currency: Currency;
+  onApplyRebalance?: (proposedAssets: Array<{ ticker: string; sector?: string; weight_pct: number; amount_inr?: number }>) => void;
+  rebalanceAdopted?: boolean;
 }) {
   const [result, setResult] = useState<ScenarioRiskResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1220,7 +1422,7 @@ function RiskSummaryEngine({
   };
 
   return (
-    <section className="panel api-risk-panel">
+    <section className="panel api-risk-panel" id="risk-summary-engine">
       <div className="panel-heading">
         <div>
           <div className="eyebrow">Risk engine · Full analysis</div>
@@ -1300,17 +1502,89 @@ function RiskSummaryEngine({
               ) : <p className="api-empty">The engine returned no goal conflicts for these inputs.</p>}
             </div>
             <div className="api-analysis-block">
-              <div className="api-block-heading"><h3>{result.ai_analysis.alternative_portfolio.name}</h3><span>Illustrative alternative</span></div>
-              <div className="api-alternative-summary">
-                <span>Modeled drawdown saved <strong>{money(result.ai_analysis.alternative_portfolio.drawdown_saved_inr, currency)}</strong></span>
-                <span>Stressed median <strong>{money(result.ai_analysis.alternative_portfolio.stressed_value_median_inr, currency)}</strong></span>
-              </div>
-              <p>{result.ai_analysis.alternative_portfolio.tradeoff_explanation}</p>
-              <div className="api-asset-chips">
-                {result.ai_analysis.alternative_portfolio.proposed_assets.map((asset) => (
-                  <span key={asset.ticker}>{asset.ticker} · {formatPercent(asset.weight_pct)}</span>
-                ))}
-              </div>
+              {(() => {
+                const alt = result.ai_analysis.alternative_portfolio;
+                return (
+                  <>
+                    <div className="api-block-heading">
+                      <h3>{alt.name}</h3>
+                      <span>
+                        {alt.constraints_applied
+                          ? `Constraint-driven rebalance · Cap ${alt.constraints_applied.max_loss_tolerance_pct}%`
+                          : "Illustrative alternative"}
+                      </span>
+                    </div>
+                    <div className="api-alternative-summary">
+                      <div><span>Modeled drawdown saved</span><strong>{money(alt.drawdown_saved_inr, currency)}</strong></div>
+                      <div><span>Stressed median</span><strong>{money(alt.stressed_value_median_inr, currency)}</strong></div>
+                      {alt.estimated_friction_inr !== undefined && (
+                        <div><span>Tax & friction</span><strong>~{money(alt.estimated_friction_inr, currency)}</strong></div>
+                      )}
+                      {alt.annual_opportunity_cost_pct !== undefined && (
+                        <div><span>Opportunity cost</span><strong>~{formatPercent(alt.annual_opportunity_cost_pct)}/yr</strong></div>
+                      )}
+                    </div>
+                    <p>{alt.tradeoff_explanation}</p>
+                    {alt.actionable_trades && alt.actionable_trades.length > 0 && (
+                      <div style={{ marginTop: "10px", marginBottom: "10px" }}>
+                        <div className="api-block-heading"><h4 style={{ fontSize: "11px", margin: "0 0 6px", color: "var(--muted)" }}>Actionable Trade Tickets</h4></div>
+                        <ul className="rebalance-list">
+                          {alt.actionable_trades.map((trade, idx) => (
+                            <li key={`${trade.ticker}-${idx}`}>
+                              <strong>{trade.action}</strong>
+                              <span>{trade.ticker} · {trade.name}</span>
+                              <b>{trade.amount_change_inr < 0 ? "-" : "+"}{money(Math.abs(trade.amount_change_inr), currency)} ({trade.weight_change_pct > 0 ? "+" : ""}{trade.weight_change_pct}%)</b>
+                              <small>{trade.reason}</small>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div className="api-asset-chips">
+                      {alt.proposed_assets.map((asset) => (
+                        <span key={asset.ticker}>{asset.ticker} · {formatPercent(asset.weight_pct)}</span>
+                      ))}
+                    </div>
+                    {alt.constraints_applied && (
+                      <p className="microcopy" style={{ marginTop: "8px" }}>
+                        Constraints: Drawdown cap {alt.constraints_applied.max_loss_tolerance_pct}% · Turnover budget {alt.constraints_applied.turnover_budget_pct}% (Executed: {alt.constraints_applied.actual_turnover_pct}%) · Min liquidity: {alt.constraints_applied.min_liquidity_pct}% · Universe: {alt.constraints_applied.hedge_preference}
+                      </p>
+                    )}
+                    {onApplyRebalance && alt.proposed_assets && alt.proposed_assets.length > 0 && (
+                      <div style={{ marginTop: "14px" }}>
+                        <button
+                          type="button"
+                          className="action-button primary"
+                          style={{
+                            width: "100%",
+                            padding: "10px 14px",
+                            fontWeight: 600,
+                            fontSize: "12px",
+                            cursor: "pointer",
+                            background: "#2EAF7D",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "6px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "6px",
+                            boxShadow: "0 2px 8px rgba(46, 175, 125, 0.3)",
+                          }}
+                          onClick={() => onApplyRebalance(alt.proposed_assets)}
+                        >
+                          ✓ Adopt This Rebalance (Updates Cash &amp; Portfolio Above)
+                        </button>
+                        {rebalanceAdopted && (
+                          <div style={{ marginTop: "8px", padding: "6px 10px", background: "rgba(46, 175, 125, 0.1)", border: "1px solid #2EAF7D", borderRadius: "6px", color: "#2EAF7D", fontSize: "11px", fontWeight: 600, textAlign: "center" }}>
+                            ✓ Rebalance active — Liquid Cash Buffer &amp; Holdings updated above!
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
           {result.ai_analysis.assumptions_used.length > 0 && (
@@ -1419,6 +1693,8 @@ function ButterflyContagionPage({
   const [scenarioId, setScenarioId] = useState<string>(butterflyScenarios[0].id);
   const selectedScenario = butterflyScenarios.find((scenario) => scenario.id === scenarioId) ?? butterflyScenarios[0];
   const [magnitude, setMagnitude] = useState<number>(selectedScenario.magnitude);
+  const [turnoverBudget, setTurnoverBudget] = useState<number>(25);
+  const [contagionHedgePref, setContagionHedgePref] = useState<"multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive">("multi_asset");
   const [result, setResult] = useState<ContagionSimulationResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1434,6 +1710,10 @@ function ButterflyContagionPage({
         scenario_id: scenarioId,
         custom_magnitude_pct: customMagnitude,
         portfolio: { assets: apiAssets(portfolio, weights) },
+        recommendation_constraints: {
+          max_turnover_pct: turnoverBudget,
+          hedge_preference: contagionHedgePref,
+        },
       }));
     } catch (requestError) {
       setError(requestErrorMessage(requestError));
@@ -1478,6 +1758,29 @@ function ButterflyContagionPage({
               onChange={(event) => setMagnitude(Number(event.target.value))}
             />
             <small>{selectedScenario.unit === "bps" ? "Basis points" : "Percent shock"}</small>
+          </label>
+          <label className="magnitude-control">
+            <span>Turnover budget <strong>{turnoverBudget}%</strong></span>
+            <input
+              type="range"
+              min="5"
+              max="50"
+              step="5"
+              value={turnoverBudget}
+              aria-label="Rebalance turnover budget"
+              onChange={(event) => setTurnoverBudget(Number(event.target.value))}
+            />
+            <small>Max capital turnover budget</small>
+          </label>
+          <label>
+            <span>Safe haven focus</span>
+            <select value={contagionHedgePref} onChange={(event) => setContagionHedgePref(event.target.value as any)}>
+              <option value="multi_asset">Multi-Asset (Cash + Gold)</option>
+              <option value="gold_focus">Gold Focus (GOLDBEES)</option>
+              <option value="liquid_debt_focus">Liquid Debt Focus (LIQUIDBEES)</option>
+              <option value="equity_defensive">Defensive Equity (Low Beta)</option>
+            </select>
+            <small>Defensive asset universe</small>
           </label>
           <button type="submit" className="apply-settings" disabled={loading}>{loading ? "Simulating…" : "Run contagion simulation"}</button>
         </form>
@@ -1549,8 +1852,16 @@ function ButterflyContagionPage({
                 <div><span>Drawdown saved</span><strong>{money(strategy.drawdown_saved_inr, currency)}</strong></div>
                 <div><span>Post-hedge impact</span><strong>{formatPercent(strategy.post_hedge_impact_pct)}</strong></div>
                 <div><span>Proposed reallocation</span><strong>{money(strategy.reallocation_amount_inr, currency)}</strong></div>
+                {strategy.friction_inr !== undefined && (
+                  <div><span>Estimated friction</span><strong>~{money(strategy.friction_inr, currency)}</strong></div>
+                )}
               </div>
               <p className="panel-intro">Opportunity cost: {strategy.opportunity_cost}</p>
+              {strategy.constraints_applied && (
+                <p className="microcopy" style={{ padding: "0 14px 10px" }}>
+                  Constraints applied: Turnover budget {strategy.constraints_applied.turnover_budget_pct}% · Executed {strategy.constraints_applied.actual_turnover_pct}% · Focus {strategy.constraints_applied.hedge_preference}
+                </p>
+              )}
               {strategy.proposed_rebalance.length > 0 && (
                 <ul className="rebalance-list">
                   {strategy.proposed_rebalance.map((action, index) => (
@@ -1676,7 +1987,13 @@ export default function Dashboard() {
   const [savedState] = useState(loadSavedState);
   const [activePage] = useState(currentPage);
   const [portfolioId, setPortfolioId] = useState(savedState?.portfolioId ?? portfolios[0].id);
-  const portfolio = portfolios.find((item) => item.id === portfolioId) ?? portfolios[0];
+  const basePortfolio = portfolios.find((item) => item.id === portfolioId) ?? portfolios[0];
+  const [customHoldings, setCustomHoldings] = useState<Holding[] | null>(null);
+  const [rebalanceAdopted, setRebalanceAdopted] = useState(false);
+  const portfolio = useMemo(() => {
+    if (!customHoldings) return basePortfolio;
+    return { ...basePortfolio, holdings: customHoldings };
+  }, [basePortfolio, customHoldings]);
   const [weights, setWeights] = useState(savedState?.weights ?? portfolio.holdings.map((holding) => holding.weight));
   const [alternativeWeights, setAlternativeWeights] = useState(savedState?.alternativeWeights ?? createAlternativeWeights(portfolio));
   const [period, setPeriod] = useState<12 | 24>(savedState?.period ?? 12);
@@ -1686,6 +2003,9 @@ export default function Dashboard() {
   const [horizon, setHorizon] = useState(savedState?.horizon ?? portfolio.investorProfile.horizon_years);
   const [liquidityNeed, setLiquidityNeed] = useState(savedState?.liquidityNeed ?? demoLiquidityNeed(portfolio));
   const [lossLimit, setLossLimit] = useState(savedState?.lossLimit ?? 15);
+  const [maxTurnoverPct, setMaxTurnoverPct] = useState(savedState?.maxTurnoverPct ?? 25);
+  const [minLiquidityPct, setMinLiquidityPct] = useState(savedState?.minLiquidityPct ?? 20);
+  const [hedgePreference, setHedgePreference] = useState<"multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive">(savedState?.hedgePreference ?? "multi_asset");
   const [darkMode, setDarkMode] = useState(loadSessionTheme);
   const [diagnosticsFormVersion, setDiagnosticsFormVersion] = useState(0);
   const pageMeta = pages.find((page) => page.id === activePage) ?? pages[0];
@@ -1703,6 +2023,9 @@ export default function Dashboard() {
         horizon,
         liquidityNeed,
         lossLimit,
+        maxTurnoverPct,
+        minLiquidityPct,
+        hedgePreference,
       } satisfies SavedDashboardState));
     } catch (error) {
       console.error("Could not save Vertex dashboard settings.", error);
@@ -1718,6 +2041,9 @@ export default function Dashboard() {
     horizon,
     liquidityNeed,
     lossLimit,
+    maxTurnoverPct,
+    minLiquidityPct,
+    hedgePreference,
   ]);
 
   useEffect(() => {
@@ -1748,6 +2074,10 @@ export default function Dashboard() {
     () => activeScenario ? calculateScenario(portfolio, weights, activeScenario) : null,
     [portfolio, weights, activeScenario],
   );
+  const hedgedScenarioResult = useMemo(
+    () => activeScenario ? calculateHedgedScenario(portfolio, weights, activeScenario, maxTurnoverPct, hedgePreference) : null,
+    [portfolio, weights, activeScenario, maxTurnoverPct, hedgePreference],
+  );
   const riskSummaryRequest: ScenarioRiskRequest = {
     investor_profile: {
       horizon_years: horizon,
@@ -1764,18 +2094,29 @@ export default function Dashboard() {
       currency_inr_usd_shift_pct: activeScenario?.fxPct ?? 0,
       custom_ai_prompt: "",
     },
+    recommendation_constraints: {
+      max_loss_tolerance_pct: lossLimit,
+      max_turnover_pct: maxTurnoverPct,
+      min_liquidity_pct: minLiquidityPct,
+      hedge_preference: hedgePreference,
+    },
   };
 
   const changePortfolio = (id: string) => {
     const next = portfolios.find((item) => item.id === id);
     if (!next) return;
     setPortfolioId(id);
+    setCustomHoldings(null);
+    setRebalanceAdopted(false);
     setWeights(next.holdings.map((holding) => holding.weight));
     setAlternativeWeights(createAlternativeWeights(next));
     setRiskTolerance(profileRisk(next.investorProfile));
     setHorizon(next.investorProfile.horizon_years);
     setLiquidityNeed(demoLiquidityNeed(next));
     setLossLimit(15);
+    setMaxTurnoverPct(25);
+    setMinLiquidityPct(20);
+    setHedgePreference("multi_asset");
     setDiagnosticsFormVersion((version) => version + 1);
   };
   const updateWeight = (
@@ -1789,15 +2130,20 @@ export default function Dashboard() {
       : weight));
   };
   const resetView = () => {
-    setWeights(portfolio.holdings.map((holding) => holding.weight));
-    setAlternativeWeights(createAlternativeWeights(portfolio));
+    setCustomHoldings(null);
+    setRebalanceAdopted(false);
+    setWeights(basePortfolio.holdings.map((holding) => holding.weight));
+    setAlternativeWeights(createAlternativeWeights(basePortfolio));
     setActiveScenario(null);
     setPeriod(12);
     setCurrency("INR");
-    setRiskTolerance(profileRisk(portfolio.investorProfile));
-    setHorizon(portfolio.investorProfile.horizon_years);
-    setLiquidityNeed(demoLiquidityNeed(portfolio));
+    setRiskTolerance(profileRisk(basePortfolio.investorProfile));
+    setHorizon(basePortfolio.investorProfile.horizon_years);
+    setLiquidityNeed(demoLiquidityNeed(basePortfolio));
     setLossLimit(15);
+    setMaxTurnoverPct(25);
+    setMinLiquidityPct(20);
+    setHedgePreference("multi_asset");
     setDiagnosticsFormVersion((version) => version + 1);
   };
   const customScenarioChange = (
@@ -1809,6 +2155,56 @@ export default function Dashboard() {
       ...(current?.id === "custom" ? current : custom),
       [key]: value,
     }));
+  };
+
+  const handleRunFullAnalysis = () => {
+    const panel = document.getElementById("risk-summary-engine");
+    if (panel) {
+      panel.scrollIntoView({ behavior: "smooth" });
+      const runBtn = panel.querySelector<HTMLButtonElement>(".api-run-button");
+      runBtn?.click();
+    }
+  };
+
+  const handleApplyRebalance = (proposedAssets: Array<{ ticker: string; sector?: string; weight_pct: number; amount_inr?: number }>) => {
+    const existingMap = new Map(basePortfolio.holdings.map((h) => [h.ticker, h]));
+    const updatedHoldings: Holding[] = [];
+    const newWeights: number[] = [];
+
+    for (const asset of proposedAssets) {
+      const existing = existingMap.get(asset.ticker);
+      if (existing) {
+        updatedHoldings.push({ ...existing, weight: asset.weight_pct });
+        newWeights.push(asset.weight_pct);
+        existingMap.delete(asset.ticker);
+      } else {
+        const isLiquid = asset.ticker.includes("LIQUID") || asset.sector === "Liquid Debt";
+        const isGold = asset.ticker.includes("GOLD") || asset.sector === "Gold";
+        updatedHoldings.push({
+          ticker: asset.ticker,
+          name: isLiquid ? "Liquid ETF / Cash Buffer" : isGold ? "Gold ETF Hedge" : `${asset.ticker} Defensive Hedge`,
+          assetClass: isLiquid ? "Debt" : isGold ? "Commodity" : "Equity",
+          sector: asset.sector ?? (isLiquid ? "Liquid Debt" : isGold ? "Gold" : "Defensive"),
+          weight: asset.weight_pct,
+          historicalReturn: isLiquid ? 5.8 : isGold ? 9.2 : 7.0,
+          volatility: isLiquid ? 1.0 : isGold ? 15.0 : 12.0,
+          liquidity: "High",
+          currencyExposure: "INR",
+          fxExposure: 0,
+        });
+        newWeights.push(asset.weight_pct);
+      }
+    }
+
+    for (const [_, remaining] of existingMap) {
+      updatedHoldings.push({ ...remaining, weight: 0 });
+      newWeights.push(0);
+    }
+
+    setCustomHoldings(updatedHoldings);
+    setWeights(newWeights);
+    setRebalanceAdopted(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
@@ -1855,14 +2251,25 @@ export default function Dashboard() {
                 currency={currency}
                 scenario={activeScenario}
                 scenarioResult={scenarioResult}
+                hedgedScenarioResult={hedgedScenarioResult}
               />
               <ScenarioPanel
                 activeScenario={activeScenario}
                 scenarioResult={scenarioResult}
+                hedgedScenarioResult={hedgedScenarioResult}
                 onSelect={setActiveScenario}
                 onCustomChange={customScenarioChange}
                 portfolio={portfolio}
                 currency={currency}
+                lossLimit={lossLimit}
+                onLossLimitChange={setLossLimit}
+                maxTurnoverPct={maxTurnoverPct}
+                onMaxTurnoverPctChange={setMaxTurnoverPct}
+                minLiquidityPct={minLiquidityPct}
+                onMinLiquidityPctChange={setMinLiquidityPct}
+                hedgePreference={hedgePreference}
+                onHedgePreferenceChange={setHedgePreference}
+                onSubmitRebalance={handleRunFullAnalysis}
               />
               <DiagnosticsPanel
                 key={`${portfolioId}-${diagnosticsFormVersion}`}
@@ -1876,10 +2283,19 @@ export default function Dashboard() {
                 onLiquidityNeedChange={setLiquidityNeed}
                 lossLimit={lossLimit}
                 onLossLimitChange={setLossLimit}
+                maxTurnoverPct={maxTurnoverPct}
+                onMaxTurnoverPctChange={setMaxTurnoverPct}
+                hedgePreference={hedgePreference}
+                onHedgePreferenceChange={setHedgePreference}
                 scenarioResult={scenarioResult}
                 currency={currency}
               />
-              <RiskSummaryEngine payload={riskSummaryRequest} currency={currency} />
+              <RiskSummaryEngine
+                payload={riskSummaryRequest}
+                currency={currency}
+                onApplyRebalance={handleApplyRebalance}
+                rebalanceAdopted={rebalanceAdopted}
+              />
             </div>
           )}
           {activePage === "allocation" && (
@@ -1903,6 +2319,10 @@ export default function Dashboard() {
                 onLiquidityNeedChange={setLiquidityNeed}
                 lossLimit={lossLimit}
                 onLossLimitChange={setLossLimit}
+                maxTurnoverPct={maxTurnoverPct}
+                onMaxTurnoverPctChange={setMaxTurnoverPct}
+                hedgePreference={hedgePreference}
+                onHedgePreferenceChange={setHedgePreference}
                 scenarioResult={scenarioResult}
                 currency={currency}
               />
@@ -1913,10 +2333,20 @@ export default function Dashboard() {
               <ScenarioPanel
                 activeScenario={activeScenario}
                 scenarioResult={scenarioResult}
+                hedgedScenarioResult={hedgedScenarioResult}
                 onSelect={setActiveScenario}
                 onCustomChange={customScenarioChange}
                 portfolio={portfolio}
                 currency={currency}
+                lossLimit={lossLimit}
+                onLossLimitChange={setLossLimit}
+                maxTurnoverPct={maxTurnoverPct}
+                onMaxTurnoverPctChange={setMaxTurnoverPct}
+                minLiquidityPct={minLiquidityPct}
+                onMinLiquidityPctChange={setMinLiquidityPct}
+                hedgePreference={hedgePreference}
+                onHedgePreferenceChange={setHedgePreference}
+                onSubmitRebalance={handleRunFullAnalysis}
               />
               <PerformancePanel
                 portfolio={portfolio}
@@ -1925,6 +2355,7 @@ export default function Dashboard() {
                 currency={currency}
                 scenario={activeScenario}
                 scenarioResult={scenarioResult}
+                hedgedScenarioResult={hedgedScenarioResult}
               />
               <DiagnosticsPanel
                 key={`${portfolioId}-${diagnosticsFormVersion}`}
@@ -1938,8 +2369,18 @@ export default function Dashboard() {
                 onLiquidityNeedChange={setLiquidityNeed}
                 lossLimit={lossLimit}
                 onLossLimitChange={setLossLimit}
+                maxTurnoverPct={maxTurnoverPct}
+                onMaxTurnoverPctChange={setMaxTurnoverPct}
+                hedgePreference={hedgePreference}
+                onHedgePreferenceChange={setHedgePreference}
                 scenarioResult={scenarioResult}
                 currency={currency}
+              />
+              <RiskSummaryEngine
+                payload={riskSummaryRequest}
+                currency={currency}
+                onApplyRebalance={handleApplyRebalance}
+                rebalanceAdopted={rebalanceAdopted}
               />
             </div>
           )}
@@ -1958,10 +2399,20 @@ export default function Dashboard() {
               <ScenarioPanel
                 activeScenario={activeScenario}
                 scenarioResult={scenarioResult}
+                hedgedScenarioResult={hedgedScenarioResult}
                 onSelect={setActiveScenario}
                 onCustomChange={customScenarioChange}
                 portfolio={portfolio}
                 currency={currency}
+                lossLimit={lossLimit}
+                onLossLimitChange={setLossLimit}
+                maxTurnoverPct={maxTurnoverPct}
+                onMaxTurnoverPctChange={setMaxTurnoverPct}
+                minLiquidityPct={minLiquidityPct}
+                onMinLiquidityPctChange={setMinLiquidityPct}
+                hedgePreference={hedgePreference}
+                onHedgePreferenceChange={setHedgePreference}
+                onSubmitRebalance={handleRunFullAnalysis}
               />
             </div>
           )}

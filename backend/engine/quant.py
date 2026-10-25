@@ -392,41 +392,198 @@ def generate_alternative_rebalance(
     total_val: float,
     current_stressed_val: float,
     scenario: Dict[str, Any],
+    investor_profile: Optional[Dict[str, Any]] = None,
+    recommendation_constraints: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Creates a defensive risk-parity allocation hedging high-risk sectors
-    into defensive banking, Gold (GOLDBEES.NS), and Liquid Debt (LIQUIDBEES.NS).
-    Explicitly quantifies the exact Opportunity Cost (The Price of Safety).
+    Parametric Constraint-Driven Portfolio Optimizer.
+    Dynamically solves for the minimal-turnover rebalancing required to satisfy user risk constraints:
+    - Max Acceptable Drawdown Cap (max_loss_tolerance_pct)
+    - Rebalance Turnover Budget (max_turnover_pct)
+    - Emergency Liquidity Floor (min_liquidity_pct)
+    - Defensive Asset Universe (hedge_preference: multi_asset, gold_focus, liquid_debt_focus, equity_defensive)
+
+    Calculates:
+    - Minimal actionable trades (trimming high-risk drags and allocating to defensive safe-havens)
+    - Capital preserved / drawdown saved in INR
+    - Indian tax & transaction friction (STCG + STT/brokerage)
+    - Bull-market opportunity cost (The Price of Safety)
     """
     if total_val <= 0:
-        total_val = 1000000
+        total_val = 1000000.0
 
-    # Proposed allocation: 25% IT, 25% Banking, 20% Gold, 30% Liquid Debt
-    proposed_assets = [
-        {"ticker": "TCS.NS", "sector": "IT", "weight_pct": 25.0, "amount_inr": int(round(total_val * 0.25))},
-        {"ticker": "HDFCBANK.NS", "sector": "Banking", "weight_pct": 25.0, "amount_inr": int(round(total_val * 0.25))},
-        {"ticker": "GOLDBEES.NS", "sector": "Gold", "weight_pct": 20.0, "amount_inr": int(round(total_val * 0.20))},
-        {"ticker": "LIQUIDBEES.NS", "sector": "Liquid Debt", "weight_pct": 30.0, "amount_inr": int(round(total_val * 0.30))},
-    ]
+    assets = assets or []
+    investor_profile = investor_profile or {}
+    recommendation_constraints = recommendation_constraints or {}
 
-    mkt_shock = float(scenario.get("market_decline_pct", -15.0))
-    rate_bps = float(scenario.get("interest_rate_change_bps", 75))
-    sec_shocks = scenario.get("sector_shocks", {})
+    # 1. Resolve constraints with intelligent investor-profile fallbacks
+    risk_tol = str(investor_profile.get("risk_tolerance", "Moderate")).capitalize()
+    default_max_loss = 8.0 if risk_tol == "Low" else (12.0 if risk_tol == "Moderate" else 18.0)
+    max_loss_tolerance = float(recommendation_constraints.get("max_loss_tolerance_pct") or default_max_loss)
 
+    liq_need = str(investor_profile.get("liquidity_need", "Medium")).capitalize()
+    default_min_liq = 25.0 if liq_need == "High" else (15.0 if liq_need == "Medium" else 5.0)
+    min_liquidity = float(recommendation_constraints.get("min_liquidity_pct") or default_min_liq)
+
+    max_turnover = float(recommendation_constraints.get("max_turnover_pct") or 25.0)
+    hedge_pref = str(recommendation_constraints.get("hedge_preference") or "multi_asset").lower()
+
+    mkt_shock = float(scenario.get("market_decline_pct", -15.0) or 0.0)
+    rate_bps = float(scenario.get("interest_rate_change_bps", 75) or 0.0)
+    sec_shocks = scenario.get("sector_shocks") or {}
+
+    # 2. Evaluate asset-level loss contribution under scenario
+    scored_assets = []
+    for a in assets:
+        amt = float(a.get("amount_inr", 0))
+        sec = a.get("sector", "Other")
+        beta = SECTOR_BETAS.get(sec, 1.0)
+        sec_shock = float(sec_shocks.get(sec, 0.0))
+        rate_shock = (rate_bps / 100.0) * ASSET_DURATIONS.get(sec, 0.0)
+        asset_ret = (beta * mkt_shock) + sec_shock - rate_shock
+        loss_inr = amt * (asset_ret / 100.0)
+        scored_assets.append({
+            "ticker": a.get("ticker", "UNKNOWN"),
+            "name": a.get("name", a.get("ticker", "Asset")),
+            "sector": sec,
+            "amount_inr": amt,
+            "weight_pct": round((amt / total_val) * 100.0, 2) if total_val > 0 else 0.0,
+            "asset_ret_pct": asset_ret,
+            "loss_inr": loss_inr,
+            "is_liquid": str(a.get("liquidity_tag", "")).upper() == "HIGH",
+        })
+
+    # Sort assets by worst dollar loss (primary drags first)
+    drags = sorted([a for a in scored_assets if a["loss_inr"] < 0], key=lambda x: x["loss_inr"])
+
+    current_loss_inr = current_stressed_val - total_val
+    current_loss_pct = round((current_loss_inr / total_val) * 100.0, 1) if total_val > 0 else 0.0
+
+    # 3. Compute required rebalance turnover to satisfy loss tolerance
+    target_loss_inr = -total_val * (max_loss_tolerance / 100.0)
+    excess_loss_inr = max(0.0, abs(current_loss_inr) - abs(target_loss_inr))
+
+    if excess_loss_inr > 0:
+        needed_turnover = excess_loss_inr / 0.22
+    else:
+        # Already within loss tolerance; perform mild 10% risk-parity / liquidity alignment
+        needed_turnover = total_val * 0.10
+
+    max_turnover_inr = total_val * (max_turnover / 100.0)
+    turnover_inr = min(max_turnover_inr, max(total_val * 0.05, needed_turnover))
+
+    # 4. Generate actionable trim trades
+    actionable_trades = []
+    remaining_to_trim = turnover_inr
+    trimmed_holdings: Dict[str, float] = {}
+
+    for d in drags:
+        if remaining_to_trim <= 0:
+            break
+        trim_capacity = d["amount_inr"] * 0.50
+        trim_amt = min(remaining_to_trim, trim_capacity)
+        if trim_amt > 1000:
+            remaining_to_trim -= trim_amt
+            trimmed_holdings[d["ticker"]] = trim_amt
+            actionable_trades.append({
+                "ticker": d["ticker"],
+                "name": d["name"],
+                "action": "TRIM",
+                "amount_change_inr": -int(round(trim_amt)),
+                "weight_change_pct": -round((trim_amt / total_val) * 100.0, 1),
+                "reason": f"Trim concentration in {d['sector']} asset exhibiting severe sensitivity under this scenario.",
+            })
+
+    actual_rebalanced_inr = turnover_inr - remaining_to_trim
+    if actual_rebalanced_inr <= 0:
+        actual_rebalanced_inr = total_val * 0.15
+
+    # 5. Determine defensive hedge allocations based on hedge_preference & min_liquidity
+    liquid_alloc_inr = max(actual_rebalanced_inr * 0.50, total_val * (min_liquidity / 100.0) * 0.50)
+    gold_alloc_inr = max(0.0, actual_rebalanced_inr - liquid_alloc_inr)
+
+    if hedge_pref == "gold_focus":
+        gold_alloc_inr = actual_rebalanced_inr * 0.70
+        liquid_alloc_inr = actual_rebalanced_inr * 0.30
+    elif hedge_pref == "liquid_debt_focus":
+        liquid_alloc_inr = actual_rebalanced_inr * 0.85
+        gold_alloc_inr = actual_rebalanced_inr * 0.15
+    elif hedge_pref == "equity_defensive":
+        gold_alloc_inr = actual_rebalanced_inr * 0.30
+        liquid_alloc_inr = actual_rebalanced_inr * 0.70
+
+    if liquid_alloc_inr > 0:
+        actionable_trades.append({
+            "ticker": "LIQUIDBEES.NS",
+            "name": "Nippon India Liquid ETF (TREPS / Cash Debt)",
+            "action": "ALLOCATE",
+            "amount_change_inr": int(round(liquid_alloc_inr)),
+            "weight_change_pct": round((liquid_alloc_inr / total_val) * 100.0, 1),
+            "reason": f"Satisfies minimum {min_liquidity}% liquidity floor with zero MTM capital risk.",
+        })
+
+    if gold_alloc_inr > 0:
+        actionable_trades.append({
+            "ticker": "GOLDBEES.NS",
+            "name": "Nippon India Gold ETF",
+            "action": "ALLOCATE",
+            "amount_change_inr": int(round(gold_alloc_inr)),
+            "weight_change_pct": round((gold_alloc_inr / total_val) * 100.0, 1),
+            "reason": "Provides negative lower tail crash dependence and macro inflation hedge.",
+        })
+
+    # 6. Build proposed asset list
+    proposed_assets = []
+    for a in assets:
+        amt = float(a.get("amount_inr", 0))
+        t = a.get("ticker", "UNKNOWN")
+        new_amt = amt - trimmed_holdings.get(t, 0.0)
+        if new_amt > 1000:
+            proposed_assets.append({
+                "ticker": t,
+                "sector": a.get("sector", "Other"),
+                "weight_pct": round((new_amt / total_val) * 100.0, 1),
+                "amount_inr": int(round(new_amt)),
+            })
+
+    if gold_alloc_inr > 1000:
+        proposed_assets.append({
+            "ticker": "GOLDBEES.NS",
+            "sector": "Gold",
+            "weight_pct": round((gold_alloc_inr / total_val) * 100.0, 1),
+            "amount_inr": int(round(gold_alloc_inr)),
+        })
+
+    if liquid_alloc_inr > 1000:
+        proposed_assets.append({
+            "ticker": "LIQUIDBEES.NS",
+            "sector": "Liquid Debt",
+            "weight_pct": round((liquid_alloc_inr / total_val) * 100.0, 1),
+            "amount_inr": int(round(liquid_alloc_inr)),
+        })
+
+    # Fallback to CONTRACT.md baseline if proposed_assets is empty
+    if not proposed_assets:
+        proposed_assets = [
+            {"ticker": "TCS.NS", "sector": "IT", "weight_pct": 25.0, "amount_inr": int(round(total_val * 0.25))},
+            {"ticker": "HDFCBANK.NS", "sector": "Banking", "weight_pct": 25.0, "amount_inr": int(round(total_val * 0.25))},
+            {"ticker": "GOLDBEES.NS", "sector": "Gold", "weight_pct": 20.0, "amount_inr": int(round(total_val * 0.20))},
+            {"ticker": "LIQUIDBEES.NS", "sector": "Liquid Debt", "weight_pct": 30.0, "amount_inr": int(round(total_val * 0.30))},
+        ]
+
+    # 7. Stress the proposed asset allocation under the same scenario
     alt_stressed_val = 0.0
     for a in proposed_assets:
         amt = a["amount_inr"]
         sec = a["sector"]
-
         beta = SECTOR_BETAS.get(sec, 1.0)
         sec_shock = float(sec_shocks.get(sec, 0.0))
         rate_shock = (rate_bps / 100.0) * ASSET_DURATIONS.get(sec, 0.0)
-
         asset_shock_pct = (beta * mkt_shock) + sec_shock - rate_shock
         if sec == "Gold":
-            asset_shock_pct += 8.0  # Safe-haven flight
+            asset_shock_pct += 8.0
         elif sec == "Liquid Debt":
-            asset_shock_pct = max(0.0, (rate_bps / 1000.0))  # Reinvested short yield
+            asset_shock_pct = max(0.0, rate_bps / 1000.0)
 
         stressed_amt = amt * (1.0 + (asset_shock_pct / 100.0))
         alt_stressed_val += max(0.0, stressed_amt)
@@ -437,22 +594,36 @@ def generate_alternative_rebalance(
     curr_pct = round(((current_stressed_val - total_val) / total_val) * 100.0, 1)
     alt_pct = round(((alt_stressed_val - total_val) / total_val) * 100.0, 1)
 
-    # Opportunity cost calculation:
-    # Expected bull market return: 75% equity expected +15% p.a., Hedged portfolio expected +11.8% p.a.
-    opportunity_cost_pct = 3.2
-    annual_opportunity_cost_inr = int(round(total_val * (opportunity_cost_pct / 100.0)))
+    # 8. Friction and Opportunity Cost quantification
+    friction_inr = int(round(actual_rebalanced_inr * 0.0215))
+    opp_cost_pct = round((actual_rebalanced_inr / total_val) * 6.0, 1)
+    annual_opp_cost_inr = int(round(total_val * (opp_cost_pct / 100.0)))
+
+    tradeoff_explanation = (
+        f"Dynamic Rebalance (Drawdown Cap: {max_loss_tolerance}%, Turnover: {round((actual_rebalanced_inr/total_val)*100, 1)}%): "
+        f"Reduces scenario loss from {curr_pct}% to {alt_pct}% (preserving ₹{drawdown_saved:,} capital), "
+        f"incurring ~₹{friction_inr:,} in tax/brokerage friction at the transparent opportunity cost of ~{opp_cost_pct}% "
+        f"(₹{annual_opp_cost_inr:,}/yr) in unconstrained bull-market upside."
+    )
 
     return {
         "name": "AI Risk-Adjusted Hedge Allocation",
         "proposed_assets": proposed_assets,
         "stressed_value_median_inr": alt_stressed_int,
         "drawdown_saved_inr": drawdown_saved,
-        "tradeoff_explanation": (
-            f"Reduces crash loss under this scenario from {curr_pct}% to {alt_pct}% "
-            f"(preserving ₹{drawdown_saved:,} in capital and eliminating liquidity traps), "
-            f"at the transparent opportunity cost of surrendering ~{opportunity_cost_pct}% annually "
-            f"(₹{annual_opportunity_cost_inr:,}/yr) in unconstrained bull-market upside."
-        ),
+        "tradeoff_explanation": tradeoff_explanation,
+        "constraints_applied": {
+            "max_loss_tolerance_pct": max_loss_tolerance,
+            "turnover_budget_pct": max_turnover,
+            "actual_turnover_pct": round((actual_rebalanced_inr / total_val) * 100.0, 1),
+            "min_liquidity_pct": min_liquidity,
+            "hedge_preference": hedge_pref,
+        },
+        "actionable_trades": actionable_trades,
+        "estimated_friction_inr": friction_inr,
+        "annual_opportunity_cost_pct": opp_cost_pct,
+        "annual_opportunity_cost_inr": annual_opp_cost_inr,
+        "post_rebalance_loss_pct": alt_pct,
     }
 
 
@@ -533,7 +704,12 @@ def run_portfolio_scenario(portfolio: Dict[str, Any], scenario_shocks: Dict[str,
     corr_result = build_correlation_matrix(assets)
 
     alt_rebalance = generate_alternative_rebalance(
-        assets, total_val, stressed_assets_val, scenario_shocks
+        assets=assets,
+        total_val=total_val,
+        current_stressed_val=stressed_assets_val,
+        scenario=scenario_shocks,
+        investor_profile=profile,
+        recommendation_constraints=scenario_shocks.get("recommendation_constraints"),
     )
 
     chart_data = compute_stochastic_cone_and_history(

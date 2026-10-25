@@ -85,6 +85,66 @@ export function calculateScenario(
   };
 }
 
+export interface HedgedScenarioResult {
+  hedgedPnl: number;
+  hedgedReturnPct: number;
+  hedgedEndingValue: number;
+  drawdownSavedInr: number;
+}
+
+export function calculateHedgedScenario(
+  portfolio: Portfolio,
+  weights: number[],
+  scenario: Scenario,
+  turnoverBudgetPct: number = 20,
+  hedgePreference: string = "multi_asset",
+): HedgedScenarioResult {
+  const { holdings } = normalizeHoldings(portfolio, weights);
+  const totalMarketVal = portfolio.marketValue || 1;
+  const contributions = holdings.map((holding) => ({
+    ticker: holding.ticker,
+    marketValue: holding.marketValue,
+    shock: assetShock(holding, scenario),
+    pnl: holding.marketValue * assetShock(holding, scenario),
+  }));
+
+  const baselinePnl = contributions.reduce((sum, h) => sum + h.pnl, 0);
+  const drags = contributions.filter((c) => c.shock < 0).sort((a, b) => a.shock - b.shock);
+  const totalDragVal = drags.reduce((sum, d) => sum + d.marketValue, 0);
+
+  const turnoverCapInr = totalMarketVal * (Math.min(Math.max(turnoverBudgetPct, 5), 50) / 100);
+  const actualTrimInr = Math.min(turnoverCapInr, totalDragVal * 0.7);
+
+  let safeHavenShock = 0.03;
+  if (hedgePreference === "gold_focus") {
+    safeHavenShock = 0.06;
+  } else if (hedgePreference === "liquid_debt_focus") {
+    safeHavenShock = 0.003;
+  } else if (hedgePreference === "equity_defensive") {
+    safeHavenShock = -0.03;
+  }
+
+  let trimmedLossAvoided = 0;
+  if (totalDragVal > 0) {
+    const avgDragShock = drags.reduce((sum, d) => sum + d.shock * (d.marketValue / totalDragVal), 0);
+    trimmedLossAvoided = actualTrimInr * Math.abs(avgDragShock);
+  }
+
+  const safeHavenPnl = actualTrimInr * safeHavenShock;
+  const drawdownSaved = Math.max(0, trimmedLossAvoided + safeHavenPnl);
+
+  const hedgedPnl = baselinePnl + drawdownSaved;
+  const hedgedReturnPct = (hedgedPnl / totalMarketVal) * 100;
+  const hedgedEndingValue = totalMarketVal + hedgedPnl;
+
+  return {
+    hedgedPnl,
+    hedgedReturnPct,
+    hedgedEndingValue,
+    drawdownSavedInr: Math.round(drawdownSaved),
+  };
+}
+
 function dailyPortfolioReturns(holdings: NormalizedHolding[]): number[] {
   return Array.from({ length: 252 }, (_, day) => {
     const market =

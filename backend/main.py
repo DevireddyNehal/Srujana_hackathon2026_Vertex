@@ -110,6 +110,15 @@ class PortfolioFile(StrictModel):
     portfolios: list[DemoPortfolio] = Field(min_length=1)
 
 
+class RecommendationConstraints(BaseModel):
+    max_loss_tolerance_pct: float | None = Field(default=None, ge=1.0, le=50.0)
+    max_turnover_pct: float | None = Field(default=None, ge=5.0, le=60.0)
+    min_liquidity_pct: float | None = Field(default=None, ge=0.0, le=60.0)
+    hedge_preference: Literal["multi_asset", "gold_focus", "liquid_debt_focus", "equity_defensive"] | None = "multi_asset"
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class AnalysisRequest(StrictModel):
     # These two fields are optional metadata. The contract's core request only
     # requires investor_profile, assets and scenario.
@@ -118,6 +127,7 @@ class AnalysisRequest(StrictModel):
     investor_profile: InvestorProfile
     assets: list[Asset] = Field(min_length=1)
     scenario: Scenario
+    recommendation_constraints: RecommendationConstraints | None = None
 
     @model_validator(mode="after")
     def validate_unique_tickers(self) -> "AnalysisRequest":
@@ -132,6 +142,7 @@ class ContagionSimulationRequest(BaseModel):
     portfolio: dict[str, Any] | list[dict[str, Any]] | None = None
     assets: list[dict[str, Any]] | None = None
     custom_magnitude_pct: float | None = None
+    recommendation_constraints: dict[str, Any] | None = None
 
     model_config = ConfigDict(extra="ignore")
 
@@ -248,7 +259,7 @@ def _normalize_parser_shocks(parser_result: Any) -> dict[str, Any]:
     return normalized
 
 
-def _make_scenario_shocks(scenario: Scenario) -> dict[str, Any]:
+def _make_scenario_shocks(scenario: Scenario, recommendation_constraints: Any = None) -> dict[str, Any]:
     """Translate API field names to the names expected by quant.py.
 
     Values parsed from a non-empty custom prompt override the corresponding
@@ -256,10 +267,16 @@ def _make_scenario_shocks(scenario: Scenario) -> dict[str, Any]:
     """
     shocks: dict[str, Any] = {
         "market_drop_pct": scenario.market_decline_pct,
+        "market_decline_pct": scenario.market_decline_pct,
         "interest_rate_change_bps": scenario.interest_rate_change_bps,
         "sector_shocks": dict(scenario.sector_shocks),
         "currency_inr_usd_shift_pct": scenario.currency_inr_usd_shift_pct,
     }
+    if recommendation_constraints:
+        if hasattr(recommendation_constraints, "model_dump"):
+            shocks["recommendation_constraints"] = recommendation_constraints.model_dump(exclude_none=True)
+        elif isinstance(recommendation_constraints, dict):
+            shocks["recommendation_constraints"] = recommendation_constraints
 
     prompt = scenario.custom_ai_prompt.strip()
     if prompt:
@@ -505,7 +522,7 @@ def analyze_scenario(request: AnalysisRequest) -> dict[str, Any]:
         "investor_profile": request.investor_profile.model_dump(),
         "assets": [asset.model_dump() for asset in request.assets],
     }
-    scenario_shocks = _make_scenario_shocks(request.scenario)
+    scenario_shocks = _make_scenario_shocks(request.scenario, request.recommendation_constraints)
 
     try:
         quant_results = run_portfolio_scenario(portfolio, scenario_shocks)
@@ -579,6 +596,7 @@ def simulate_contagion(request: ContagionSimulationRequest) -> dict[str, Any]:
             scenario_id=request.scenario_id,
             portfolio=portfolio_data,
             custom_magnitude_pct=request.custom_magnitude_pct,
+            recommendation_constraints=request.recommendation_constraints,
         )
 
         # Mirror false diversification metrics at root level for frontend UI convenience
