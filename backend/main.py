@@ -588,18 +588,21 @@ def simulate_contagion(request: ContagionSimulationRequest) -> dict[str, Any]:
                 fda = stage["false_diversification_analysis"]
                 break
 
-        result["is_false_diversification_detected"] = fda.get("is_false_diversification_detected", False)
+        is_fda = fda.get("is_false_diversification_detected", False)
+        result["is_false_diversification_detected"] = is_fda
         result["nominal_diversification_score"] = fda.get("nominal_diversification_score")
         result["effective_tail_diversification_score"] = fda.get("effective_tail_diversification_score")
         result["diversification_haircut_points"] = fda.get("diversification_haircut_points")
-        if fda.get("traps"):
+        if is_fda and fda.get("traps"):
             result["upstream_dependency"] = (
                 fda["traps"][0].get("upstream_bottleneck")
                 or fda["traps"][0].get("common_vulnerability")
-                or "Crude oil & petrochemical derivatives"
+                or fda["traps"][0].get("name")
             )
+        elif is_fda:
+            result["upstream_dependency"] = "Upstream Commodity / Factor Concentration"
         else:
-            result["upstream_dependency"] = "Crude oil & petrochemical derivatives"
+            result["upstream_dependency"] = None
 
         return result
     except Exception as exc:

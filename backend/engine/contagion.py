@@ -459,7 +459,7 @@ def _compute_contagion_inoculation(
     # Compute simulated post-hedge impact
     drawdown_saved_inr = int(round(abs(current_loss_inr) * 0.62))
     new_stressed_loss_inr = current_loss_inr + drawdown_saved_inr
-    new_loss_pct = round((new_stressed_loss_inr / total_portfolio_value) * 100.0, 1)
+    new_loss_pct = round((new_stressed_loss_inr / total_portfolio_value) * 100.0, 1) if total_portfolio_value > 0 else 0.0
 
     proposed_rebalance = []
     # Trim from largest loser
@@ -746,9 +746,12 @@ def simulate_butterfly_shock(
         "key_takeaway": (
             f"Under this {scenario_meta['title']} ({base_shock_magnitude:+.1f}%), your portfolio experiences an estimated "
             f"{total_portfolio_impact_pct}% impact (₹{int(round(total_dollar_impact)):,}). "
-            f"The primary drag is your exposure to {top_losers[0]['name'] if top_losers else 'equity sectors'} "
-            f"(₹{top_losers[0]['portfolio_impact_inr']:,}), transmitting through the "
-            f"{top_losers[0]['transmission_pathway'] if top_losers else 'market'}."
+            + (
+                f"The primary drag is your exposure to {top_losers[0]['name']} "
+                f"(₹{top_losers[0]['portfolio_impact_inr']:,}), transmitting through the {top_losers[0]['transmission_pathway']}."
+                if top_losers
+                else "No holdings experience negative transmission drag under this pathway."
+            )
         ),
         "inoculation_strategy": inoculation,
         "false_diversification_analysis": false_div_report,
