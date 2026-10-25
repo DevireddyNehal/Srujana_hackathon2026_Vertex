@@ -91,3 +91,4 @@ skills-lock.json
 tradefxbook/
 run_tradefxbook.py
 tests/test_tradefxbook.py
+*.sqlite3
