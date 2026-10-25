@@ -825,83 +825,244 @@ html[data-theme="light"] body {
    UI Clutter Prevention & Visual Polish (Responsive, Anti-Overflow)
    ========================================================================== */
 
-/* Header & Top Navigation */
+/* Header & Top Navigation (Universal Proportions & Zero Overlap) */
 .aperture-app .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 64px;
-  padding: 0 clamp(12px, 1.8vw, 24px);
-  gap: clamp(8px, 1vw, 16px);
+  min-height: 56px;
+  height: auto;
+  padding: 0 clamp(8px, 1.2vw, 20px);
+  gap: clamp(6px, 0.8vw, 14px);
   flex-wrap: nowrap;
+  width: 100%;
   max-width: 100vw;
   box-sizing: border-box;
-  overflow-x: clip;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--market-surface, #0f131a);
+  border-bottom: 1px solid var(--market-border, rgba(255, 255, 255, 0.08));
+}
+
+.aperture-app .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(6px, 0.6vw, 10px);
+  flex: 0 0 auto;
+  text-decoration: none;
+  user-select: none;
+}
+
+.aperture-app .brand-mark {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.aperture-app .brand-name {
+  font-family: Manrope, sans-serif;
+  font-size: clamp(13.5px, 1vw, 15.5px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.aperture-app .brand-divider {
+  padding: 0 4px;
+  opacity: 0.6;
+}
+
+.aperture-app .brand-name small {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  opacity: 0.8;
 }
 
 .aperture-app .top-nav {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: clamp(6px, 0.9vw, 14px);
+  justify-content: flex-start;
+  gap: clamp(2px, 0.35vw, 6px);
   flex: 1 1 auto;
   min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 4px 0;
+  box-sizing: border-box;
+}
+
+.aperture-app .top-nav::-webkit-scrollbar {
+  display: none;
+}
+
+@media (min-width: 1480px) {
+  .aperture-app .top-nav {
+    justify-content: center;
+    justify-content: safe center;
+  }
 }
 
 .aperture-app .top-nav a {
   white-space: nowrap !important;
-  padding: 20px 4px 18px !important;
-  font-size: 13px !important;
-  font-weight: 500;
-  line-height: 1.2 !important;
-  display: inline-flex;
-  align-items: center;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: clamp(5px, 0.6vh, 7px) clamp(7px, 0.55vw, 11px) !important;
+  font-size: clamp(11px, 0.7vw, 12.5px) !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  letter-spacing: -0.01em;
+  border-radius: 6px !important;
+  border: 1px solid transparent;
+  flex-shrink: 0 !important;
   cursor: pointer;
+  position: relative;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  user-select: none;
+  height: 32px;
+  box-sizing: border-box;
+  color: var(--market-text-secondary);
+}
+
+.aperture-app .top-nav a:hover {
+  color: var(--market-text) !important;
+  background: var(--market-surface-elevated, rgba(255, 255, 255, 0.05));
+  border-color: var(--market-border, rgba(255, 255, 255, 0.08));
+}
+
+.aperture-app .top-nav a.active {
+  color: var(--market-positive) !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.28) !important;
+  font-weight: 600 !important;
 }
 
 .aperture-app .top-nav a::after {
-  bottom: 10px;
-  height: 2px;
+  display: none;
 }
 
 .aperture-app .header-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: clamp(3px, 0.35vw, 6px);
   flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+.aperture-app .header-user-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #10b981;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  height: 32px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.aperture-app .header-user-btn:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+.aperture-app .header-user-name {
+  max-width: clamp(65px, 6vw, 110px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  line-height: 1.2;
+}
+
+.aperture-app .header-user-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+  flex-shrink: 0;
 }
 
 .aperture-app .header-select select {
-  min-width: 150px;
-  max-width: 220px;
-  height: 34px;
-  font-size: 12px;
-  padding: 0 26px 0 8px;
+  min-width: 80px;
+  max-width: clamp(90px, 8vw, 140px);
+  height: 32px;
+  font-size: 11.5px;
+  padding: 0 20px 0 6px;
   text-overflow: ellipsis;
   white-space: nowrap;
   border-radius: 6px;
+  box-sizing: border-box;
 }
 
 .aperture-app .currency-select select,
 .aperture-app .period-select select {
-  min-width: 76px;
-  max-width: 95px;
-  height: 34px;
-  font-size: 12px;
+  min-width: 58px;
+  max-width: 78px;
+  height: 32px;
+  font-size: 11.5px;
+  padding: 0 16px 0 6px;
+  box-sizing: border-box;
 }
 
 .aperture-app .reset-view {
-  height: 34px;
-  font-size: 12px;
-  padding: 0 12px;
+  height: 32px;
+  font-size: 11.5px;
+  padding: 0 9px;
   cursor: pointer;
   border-radius: 6px;
   white-space: nowrap;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.aperture-app .theme-toggle-btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .aperture-app .data-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
   white-space: nowrap;
+  color: var(--market-text-secondary);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+@media (max-width: 1400px) {
+  .aperture-app .data-status .data-status-text {
+    display: none;
+  }
 }
 
 /* Workspace Intro & Header Banner */
@@ -1266,13 +1427,36 @@ html[data-theme="light"] body {
   color: #475569 !important;
 }
 
-.aperture-app[data-theme="light"] .top-nav a:hover,
+.aperture-app[data-theme="light"] .top-nav a:hover {
+  color: #0f172a !important;
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
 .aperture-app[data-theme="light"] .top-nav a.active {
+  color: #16a34a !important;
+  background: rgba(22, 163, 74, 0.1) !important;
+  border-color: rgba(22, 163, 74, 0.28) !important;
+  font-weight: 600 !important;
+}
+
+.aperture-app[data-theme="light"] .top-nav a::after {
+  display: none;
+}
+
+.aperture-app[data-theme="light"] .header-user-btn {
+  background: rgba(22, 163, 74, 0.1) !important;
+  border-color: rgba(22, 163, 74, 0.3) !important;
   color: #16a34a !important;
 }
 
-.aperture-app[data-theme="light"] .top-nav a.active::after {
+.aperture-app[data-theme="light"] .header-user-btn:hover {
+  background: rgba(22, 163, 74, 0.18) !important;
+}
+
+.aperture-app[data-theme="light"] .header-user-status-dot {
   background: #16a34a !important;
+  box-shadow: 0 0 6px #16a34a !important;
 }
 
 .aperture-app[data-theme="light"] .header-select select {
@@ -1412,13 +1596,16 @@ html[data-theme="light"] body {
 }
 
 /* Responsive Breakpoints */
-@media (max-width: 1100px) {
+@media (max-width: 1180px) {
   .aperture-app .app-header {
     flex-wrap: wrap;
-    padding: 8px 14px;
-    gap: 8px;
+    padding: 8px clamp(10px, 1.5vw, 16px);
+    gap: 8px 12px;
     height: auto;
     min-height: 56px;
+  }
+  .aperture-app .header-controls {
+    margin-left: auto;
   }
   .aperture-app .top-nav {
     order: 3;
@@ -1427,16 +1614,18 @@ html[data-theme="light"] body {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    padding-bottom: 2px;
-    gap: 2px;
+    padding: 4px 0 2px;
+    gap: 4px;
+    border-top: 1px solid var(--market-border, rgba(255, 255, 255, 0.06));
   }
   .aperture-app .top-nav::-webkit-scrollbar {
     display: none;
   }
   .aperture-app .top-nav a {
-    padding: 6px 12px;
-    font-size: 12px;
-    flex-shrink: 0;
+    padding: 5px 10px !important;
+    font-size: 11.5px !important;
+    height: 30px;
+    flex-shrink: 0 !important;
   }
   .aperture-app .metric-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1452,7 +1641,11 @@ html[data-theme="light"] body {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
+  .aperture-app .app-header {
+    padding: 6px 10px;
+    gap: 6px;
+  }
   .aperture-app .metric-strip {
     grid-template-columns: 1fr;
   }
@@ -1460,10 +1653,23 @@ html[data-theme="light"] body {
     width: 100%;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
+    margin-left: 0;
   }
   .aperture-app .header-select select {
-    max-width: 140px;
+    max-width: 120px;
+    font-size: 11px;
+  }
+  .aperture-app .currency-select select,
+  .aperture-app .period-select select {
+    min-width: 52px;
+    max-width: 66px;
+    font-size: 11px;
+  }
+  .aperture-app .top-nav a {
+    padding: 5px 9px !important;
+    font-size: 11px !important;
+    height: 28px;
   }
   .aperture-app .workspace-intro {
     flex-direction: column;
@@ -1477,5 +1683,52 @@ html[data-theme="light"] body {
   .aperture-app .overview-compare-teaser {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .aperture-app .brand-name small {
+    display: none;
+  }
+  .aperture-app .brand-divider {
+    display: none;
+  }
+  .aperture-app .header-controls {
+    gap: 4px;
+  }
+  .aperture-app .header-user-btn {
+    padding: 4px 6px !important;
+    font-size: 11px !important;
+    height: 30px;
+  }
+  .aperture-app .header-user-name {
+    max-width: 60px;
+  }
+  .aperture-app .header-select select {
+    max-width: 95px;
+    font-size: 10.5px;
+    height: 30px;
+  }
+  .aperture-app .currency-select select,
+  .aperture-app .period-select select {
+    min-width: 48px;
+    max-width: 58px;
+    font-size: 10.5px;
+    height: 30px;
+  }
+  .aperture-app .reset-view {
+    height: 30px;
+    font-size: 10.5px;
+    padding: 0 6px;
+  }
+  .aperture-app .theme-toggle-btn {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+  }
+  .aperture-app .top-nav a {
+    padding: 4px 8px !important;
+    font-size: 10.5px !important;
+    height: 26px;
   }
 }

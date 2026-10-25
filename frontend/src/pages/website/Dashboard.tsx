@@ -354,32 +354,10 @@ function Header({
           className="header-user-btn"
           onClick={onOpenAuthModal}
           title="Switch Trader / Login"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            background: "rgba(16, 185, 129, 0.12)",
-            border: "1px solid rgba(16, 185, 129, 0.35)",
-            color: "#10b981",
-            borderRadius: "8px",
-            padding: "6px 12px",
-            fontSize: "0.8rem",
-            fontWeight: "600",
-            cursor: "pointer",
-            transition: "all 0.15s ease",
-          }}
         >
-          <span>👤</span>
-          <span>{currentUser?.name || "Demo Trader 01"}</span>
-          <span
-            style={{
-              width: "6px",
-              height: "6px",
-              borderRadius: "50%",
-              background: "#10b981",
-              boxShadow: "0 0 6px #10b981",
-            }}
-          />
+          <span aria-hidden="true">👤</span>
+          <span className="header-user-name">{currentUser?.name || "Demo Trader 01"}</span>
+          <span className="header-user-status-dot" aria-hidden="true" />
         </button>
         <label className="header-select">
           <span className="sr-only">Portfolio</span>
@@ -409,7 +387,9 @@ function Header({
             <option value={24}>24 months</option>
           </select>
         </label>
-        <span className="data-status"><i /> Live Multi-User Data</span>
+        <span className="data-status" title="Live Multi-User Data">
+          <i aria-hidden="true" /> <span className="data-status-text">Live Multi-User Data</span>
+        </span>
         <button type="button" className="reset-view" onClick={onReset} title="Reset dashboard to portfolio defaults">Reset view</button>
 
         <button
