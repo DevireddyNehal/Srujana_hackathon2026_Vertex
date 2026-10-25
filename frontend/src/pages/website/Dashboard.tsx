@@ -387,9 +387,6 @@ function Header({
             <option value={24}>24 months</option>
           </select>
         </label>
-        <span className="data-status" title="Live Multi-User Data">
-          <i aria-hidden="true" /> <span className="data-status-text">Live Multi-User Data</span>
-        </span>
         <button type="button" className="reset-view" onClick={onReset} title="Reset dashboard to portfolio defaults">Reset view</button>
 
         <button

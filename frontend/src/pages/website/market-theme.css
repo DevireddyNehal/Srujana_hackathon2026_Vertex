@@ -956,9 +956,11 @@ html[data-theme="light"] body {
 .aperture-app .header-controls {
   display: flex;
   align-items: center;
-  gap: clamp(3px, 0.35vw, 6px);
+  gap: clamp(4px, 0.4vw, 8px);
   flex: 0 0 auto;
   box-sizing: border-box;
+  margin-left: auto !important;
+  justify-content: flex-end;
 }
 
 .aperture-app .header-user-btn {
