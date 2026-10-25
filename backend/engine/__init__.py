@@ -10,10 +10,23 @@ from .quant import (
     build_correlation_matrix,
     compute_stochastic_cone_and_history,
     generate_alternative_rebalance,
+    compute_reverse_stress_test,
+    compute_tail_dependence_matrix,
+    detect_false_diversification,
+    historical_cvar,
+    compute_pain_index,
+    compute_ulcer_index,
 )
 from .ai_agent import (
     generate_ai_insights,
     parse_custom_scenario,
+)
+from .contagion import (
+    EconomicDependencyGraph,
+    build_economic_dependency_graph,
+    get_available_contagion_scenarios,
+    simulate_butterfly_shock,
+    detect_false_diversification_trap,
 )
 
 __all__ = [
@@ -23,6 +36,18 @@ __all__ = [
     "build_correlation_matrix",
     "compute_stochastic_cone_and_history",
     "generate_alternative_rebalance",
+    "compute_reverse_stress_test",
+    "compute_tail_dependence_matrix",
+    "detect_false_diversification",
+    "historical_cvar",
+    "compute_pain_index",
+    "compute_ulcer_index",
     "generate_ai_insights",
     "parse_custom_scenario",
+    "EconomicDependencyGraph",
+    "build_economic_dependency_graph",
+    "get_available_contagion_scenarios",
+    "simulate_butterfly_shock",
+    "detect_false_diversification_trap",
 ]
+
