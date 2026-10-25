@@ -41,6 +41,12 @@ coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
+backend/trading_user_stats/*.sqlite3
+backend/trading_user_stats/*.sqlite3-shm
+backend/trading_user_stats/*.sqlite3-wal
+backend/journal/*.sqlite3
+backend/journal/*.sqlite3-shm
+backend/journal/*.sqlite3-wal
 
 # Node / Frontend
 node_modules/

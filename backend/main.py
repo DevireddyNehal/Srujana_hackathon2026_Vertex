@@ -17,6 +17,13 @@ try:
 except ImportError:  # pragma: no cover - used when main.py is imported directly
     from database import initialize_database, save_analysis  # type: ignore[no-redef]
 
+if __package__:
+    from .journal.router import router as journal_router
+    from .journal.storage import initialize_storage as initialize_journal_storage
+else:  # pragma: no cover - supports running from inside backend/
+    from journal.router import router as journal_router
+    from journal.storage import initialize_storage as initialize_journal_storage
+
 try:
     if __package__:
         from .engine.quant import run_portfolio_scenario
@@ -123,6 +130,7 @@ class AnalysisRequest(StrictModel):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     initialize_database()
+    initialize_journal_storage()
     yield
 
 
@@ -132,6 +140,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.include_router(journal_router)
 
 
 def _get_cors_origins() -> list[str]:

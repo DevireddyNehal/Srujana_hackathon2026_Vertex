@@ -1,0 +1,162 @@
+{
+  "dataset_name": "F-06 Investment Portfolio Risk and Scenario Analysis — Daily Historical Market Dataset",
+  "created_at_utc": "2026-10-24T17:56:39+00:00",
+  "requested_start_date_inclusive": "2023-10-24",
+  "requested_end_date_inclusive": "2026-10-24",
+  "date_timezone": "Asia/Kolkata (IST, UTC+05:30)",
+  "source": "Yahoo Finance Chart endpoint (unofficial endpoint; see README limitations)",
+  "source_homepage": "https://finance.yahoo.com/",
+  "source_endpoint_template": "https://query1.finance.yahoo.com/v8/finance/chart/{URL-encoded ticker}?period1=...&period2=...&interval=1d&events=div,splits",
+  "source_references": [
+    "https://finance.yahoo.com/quote/TCS.NS/history/",
+    "https://finance.yahoo.com/quote/NIFTYBEES.NS/history/",
+    "https://in.help.yahoo.com/kb/SLN2311.html"
+  ],
+  "fetch_status": "COMPLETE",
+  "fetch_errors": {},
+  "assets": {
+    "TCS.NS": {
+      "asset_name": "Tata Consultancy Services Limited",
+      "exchange": "NSE India",
+      "asset_type": "Equity",
+      "currency": "INR",
+      "symbol_note": "Yahoo Finance symbol for NSE-listed TCS.",
+      "yahoo_ticker": "TCS.NS",
+      "source_observations": 740,
+      "source_metadata": {
+        "ticker": "TCS.NS",
+        "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/TCS.NS?period1=1698105600&period2=1792886400&interval=1d&events=div%2Csplits&includeAdjustedClose=true",
+        "source_currency": "INR",
+        "source_exchange_name": "NSE",
+        "source_symbol": "TCS.NS",
+        "source_timezone": "Asia/Kolkata",
+        "source_first_bar_epoch": 1698205500,
+        "source_last_bar_epoch": 1792727100
+      }
+    },
+    "INFY.NS": {
+      "asset_name": "Infosys Limited",
+      "exchange": "NSE India",
+      "asset_type": "Equity",
+      "currency": "INR",
+      "symbol_note": "Yahoo Finance symbol for NSE-listed Infosys.",
+      "yahoo_ticker": "INFY.NS",
+      "source_observations": 740,
+      "source_metadata": {
+        "ticker": "INFY.NS",
+        "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/INFY.NS?period1=1698105600&period2=1792886400&interval=1d&events=div%2Csplits&includeAdjustedClose=true",
+        "source_currency": "INR",
+        "source_exchange_name": "NSE",
+        "source_symbol": "INFY.NS",
+        "source_timezone": "Asia/Kolkata",
+        "source_first_bar_epoch": 1698205500,
+        "source_last_bar_epoch": 1792727100
+      }
+    },
+    "HDFCBANK.NS": {
+      "asset_name": "HDFC Bank Limited",
+      "exchange": "NSE India",
+      "asset_type": "Equity",
+      "currency": "INR",
+      "symbol_note": "Yahoo Finance symbol for NSE-listed HDFC Bank.",
+      "yahoo_ticker": "HDFCBANK.NS",
+      "source_observations": 740,
+      "source_metadata": {
+        "ticker": "HDFCBANK.NS",
+        "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/HDFCBANK.NS?period1=1698105600&period2=1792886400&interval=1d&events=div%2Csplits&includeAdjustedClose=true",
+        "source_currency": "INR",
+        "source_exchange_name": "NSE",
+        "source_symbol": "HDFCBANK.NS",
+        "source_timezone": "Asia/Kolkata",
+        "source_first_bar_epoch": 1698205500,
+        "source_last_bar_epoch": 1792727100
+      }
+    },
+    "^NSEI": {
+      "asset_name": "NIFTY 50 Index",
+      "exchange": "NSE Indices",
+      "asset_type": "Equity index (price index)",
+      "currency": "INR",
+      "symbol_note": "Yahoo Finance symbol for NIFTY 50; generally no adjusted close or traded volume.",
+      "yahoo_ticker": "^NSEI",
+      "source_observations": 740,
+      "source_metadata": {
+        "ticker": "^NSEI",
+        "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?period1=1698105600&period2=1792886400&interval=1d&events=div%2Csplits&includeAdjustedClose=true",
+        "source_currency": "INR",
+        "source_exchange_name": "NSE",
+        "source_symbol": "^NSEI",
+        "source_timezone": "Asia/Kolkata",
+        "source_first_bar_epoch": 1698205500,
+        "source_last_bar_epoch": 1792727100
+      }
+    },
+    "GOLDBEES.NS": {
+      "asset_name": "Nippon India ETF Gold BeES",
+      "exchange": "NSE India",
+      "asset_type": "Gold ETF",
+      "currency": "INR",
+      "symbol_note": "Yahoo Finance symbol for Gold BeES ETF.",
+      "yahoo_ticker": "GOLDBEES.NS",
+      "source_observations": 740,
+      "source_metadata": {
+        "ticker": "GOLDBEES.NS",
+        "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/GOLDBEES.NS?period1=1698105600&period2=1792886400&interval=1d&events=div%2Csplits&includeAdjustedClose=true",
+        "source_currency": "INR",
+        "source_exchange_name": "NSE",
+        "source_symbol": "GOLDBEES.NS",
+        "source_timezone": "Asia/Kolkata",
+        "source_first_bar_epoch": 1698205500,
+        "source_last_bar_epoch": 1792727100
+      }
+    },
+    "LIQUIDBEES.NS": {
+      "asset_name": "Nippon India ETF Liquid BeES",
+      "exchange": "NSE India",
+      "asset_type": "Liquid debt ETF",
+      "currency": "INR",
+      "symbol_note": "Yahoo Finance symbol for Liquid BeES ETF.",
+      "yahoo_ticker": "LIQUIDBEES.NS",
+      "source_observations": 740,
+      "source_metadata": {
+        "ticker": "LIQUIDBEES.NS",
+        "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/LIQUIDBEES.NS?period1=1698105600&period2=1792886400&interval=1d&events=div%2Csplits&includeAdjustedClose=true",
+        "source_currency": "INR",
+        "source_exchange_name": "NSE",
+        "source_symbol": "LIQUIDBEES.NS",
+        "source_timezone": "Asia/Kolkata",
+        "source_first_bar_epoch": 1698205500,
+        "source_last_bar_epoch": 1792727100
+      }
+    }
+  },
+  "schema": {
+    "date": "ISO-8601 market session date in Asia/Kolkata",
+    "ticker": "Yahoo Finance symbol; maps are included under assets",
+    "open_high_low_close": "Source-provided daily OHLC in INR. Yahoo's Close is generally split-adjusted; see source documentation and verify corporate actions.",
+    "adjusted_close": "Yahoo Finance Adj Close where returned; includes dividend/distribution adjustments as well as splits. Blank means source did not provide a value; it is not imputed.",
+    "volume": "Source volume where available; blank for assets such as indices without traded volume.",
+    "currency": "INR as the denomination for the requested NSE stocks, ETFs and NIFTY 50 index."
+  },
+  "return_methodology": {
+    "selected_price_field": "adjusted_close when the symbol has adjusted-close observations; otherwise close only when adjusted_close is unavailable for that entire symbol (e.g. the NIFTY 50 price index). See return_price_basis.csv.",
+    "daily_returns": "Percentage changes from consecutive observed values. No forward-fill, interpolation or fabricated values. A blank return remains blank when an adjacent observation is absent.",
+    "annualized_volatility": "Sample standard deviation of daily returns multiplied by sqrt(252).",
+    "maximum_drawdown": "Computed from a wealth index compounded from available daily returns; not a forward-looking risk forecast."
+  },
+  "quality_checks": {
+    "duplicate_key": "Checked date+ticker duplicates. Exact duplicate rows are removed after being logged in duplicate_rows.csv. Conflicting duplicate values stop the script.",
+    "ohlc": "Checked high >= max(open, close), low <= min(open, close), and high >= low; anomalies are listed in invalid_ohlc_rows.csv and not altered.",
+    "missing_dates": "Compared each ticker with the observed ^NSEI date set when available; this is a proxy calendar, not an authoritative NSE holiday/session calendar. See missing_observations.csv.",
+    "nulls": "Field-specific null counts per asset are in data_quality_summary.csv; nulls remain blank in CSV files.",
+    "corporate_actions": "Dividends/distributions and splits returned in Yahoo chart events are listed in corporate_actions.csv. This may not be a complete or authoritative corporate-action ledger."
+  },
+  "limitations": [
+    "Yahoo Finance chart data is an unofficial endpoint, may be delayed, revised, throttled, unavailable for an instrument, or subject to licensing/redistribution restrictions.",
+    "This script records the actual retrieval timestamp when run; the workspace that prepared this script could not directly retrieve the raw market API, so no historical prices are embedded or fabricated in this package.",
+    "NIFTY 50 is a price index. Its close-based return excludes index dividend reinvestment; do not compare it as though it were a total-return index.",
+    "ETF market prices are not the same as NAV returns; adjusted close should be used for historical price-return calculations, and tracking error/NAV history are outside this dataset.",
+    "The shared observed-session comparison can identify asset-specific gaps on dates where the reference index has data; it cannot prove that all sources have no common missing session. An official NSE calendar would be needed for that.",
+    "Use the observations for a hackathon/research prototype only; independently verify critical results against licensed or official data before any investment decision."
+  ]
+}

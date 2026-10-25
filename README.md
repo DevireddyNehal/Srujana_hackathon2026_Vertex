@@ -59,13 +59,34 @@ Each team member works on their dedicated feature branch:
 ## 4. Getting Started
 
 ### Backend Setup
+
+From the repository root:
+
+```powershell
+python -m pip install -r backend/requirements.txt
+python -m uvicorn backend.main:app --reload --port 8000
+```
+
+Alternatively, from inside `backend/`:
+
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
 ```
+
+### Trading Statistics Dashboard
+
+The separate trading-statistics API and dashboard live in [`backend/trading_user_stats/`](backend/trading_user_stats/README.md). From the repository root, install its requirements and run it on port 8001:
+
+```bash
+python -m pip install -r backend/trading_user_stats/requirements.txt
+python -m uvicorn trading_user_stats.app.api:app --app-dir backend --reload --port 8001
+```
+
+The Trading Journal API is mounted in the main FastAPI application under `/api/journal`. It supports trade entry and editing, per-trade P&L, analytics, and local rule-based reviews. Journal records are stored in a separate SQLite database at `backend/journal/trading_journal.sqlite3` by default; override the path with `TRADING_JOURNAL_DB_PATH`. The current application has no authentication system, so journal requests use a fixed demo identity and are not suitable for private multi-user production data until connected to real authentication.
 
 ### Frontend Setup
 ```bash
