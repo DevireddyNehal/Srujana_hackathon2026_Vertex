@@ -365,3 +365,214 @@ export function formatSignedCurrency(value: number): string {
 export function formatPercent(value: number, digits = 1): string {
   return `${value < 0 ? "−" : ""}${Math.abs(value).toFixed(digits)}%`;
 }
+
+export interface RateRecoveryHorizon {
+  cagrPct: number;
+  cagrLabel: string;
+  recoveryYears: number;
+}
+
+export interface PortfolioRecoveryEstimate {
+  initialValue: number;
+  postValue: number;
+  isDrawdown: boolean;
+  lossInr: number;
+  lossPct: number;
+  returnNeededPct: number;
+  driftImpliedYears: number | null;
+  driftImpliedDisplay: string;
+  probRecoveringWithinHorizonPct: number;
+  probRecoveredAtHorizonPct: number;
+  horizonYears: number;
+  annualVolPct: number;
+  annualDriftPct: number;
+  rateTable: RateRecoveryHorizon[];
+  statusLabel: string;
+  disclaimer: string;
+}
+
+export interface RecoveryAnalysisResult {
+  unhedged: PortfolioRecoveryEstimate;
+  hedged: PortfolioRecoveryEstimate;
+  capitalPreservedInr: number;
+  yearsSaved: number;
+  probBoostPct: number;
+  isDrawdown: boolean;
+}
+
+export function normalCdf(x: number): number {
+  if (x < 0) {
+    return 1.0 - normalCdf(-x);
+  }
+  const p = 0.2316419;
+  const b1 = 0.31938153;
+  const b2 = -0.356563782;
+  const b3 = 1.781477937;
+  const b4 = -1.821255978;
+  const b5 = 1.330274429;
+  const t = 1.0 / (1.0 + p * x);
+  const z = (1.0 / Math.sqrt(2.0 * Math.PI)) * Math.exp(-0.5 * x * x);
+  const poly = ((((b5 * t + b4) * t + b3) * t + b2) * t + b1) * t;
+  return 1.0 - z * poly;
+}
+
+export function calculateRecoveryEstimate(
+  vInitial: number,
+  vPost: number,
+  annualVolPct: number,
+  annualDriftPct = 10.0,
+  horizonYears = 3.0,
+): PortfolioRecoveryEstimate {
+  const v0 = vInitial > 0 ? vInitial : 1000000;
+  const vp = vPost;
+  const sigma = Math.max(0, annualVolPct) / 100.0;
+  const mu = annualDriftPct / 100.0;
+  const H = Math.max(0.1, horizonYears);
+
+  const lossInr = Math.max(0, v0 - vp);
+  const lossPct = Number(((lossInr / v0) * 100).toFixed(2));
+  const isDrawdown = vp < v0 - 1;
+
+  if (!isDrawdown) {
+    return {
+      initialValue: Math.round(v0),
+      postValue: Math.round(vp),
+      isDrawdown: false,
+      lossInr: 0,
+      lossPct: 0,
+      returnNeededPct: 0,
+      driftImpliedYears: 0,
+      driftImpliedDisplay: "0.0 yrs (No drawdown)",
+      probRecoveringWithinHorizonPct: 100,
+      probRecoveredAtHorizonPct: 100,
+      horizonYears: H,
+      annualVolPct: Number(annualVolPct.toFixed(1)),
+      annualDriftPct: Number(annualDriftPct.toFixed(1)),
+      rateTable: [
+        { cagrPct: 5, cagrLabel: "5% CAGR (Conservative)", recoveryYears: 0 },
+        { cagrPct: 8, cagrLabel: "8% CAGR (Balanced)", recoveryYears: 0 },
+        { cagrPct: 12, cagrLabel: "12% CAGR (Historical Nifty)", recoveryYears: 0 },
+        { cagrPct: 15, cagrLabel: "15% CAGR (Aggressive)", recoveryYears: 0 },
+      ],
+      statusLabel: "Expansion (No drawdown)",
+      disclaimer: "Under positive shock scenarios, portfolio value expands beyond baseline, so no capital recovery period is required.",
+    };
+  }
+
+  if (vp <= 0) {
+    return {
+      initialValue: Math.round(v0),
+      postValue: 0,
+      isDrawdown: true,
+      lossInr: Math.round(v0),
+      lossPct: 100,
+      returnNeededPct: 999,
+      driftImpliedYears: null,
+      driftImpliedDisplay: "Indefinite (100% loss)",
+      probRecoveringWithinHorizonPct: 0,
+      probRecoveredAtHorizonPct: 0,
+      horizonYears: H,
+      annualVolPct: Number(annualVolPct.toFixed(1)),
+      annualDriftPct: Number(annualDriftPct.toFixed(1)),
+      rateTable: [],
+      statusLabel: "Total Capital Loss",
+      disclaimer: "Total capital depletion cannot be recovered through compounding alone.",
+    };
+  }
+
+  const returnNeededPct = Number((((v0 - vp) / vp) * 100).toFixed(2));
+  const a = Math.log(v0 / vp);
+
+  const benchmarkRates = [
+    { cagrPct: 5, cagrLabel: "5% CAGR (Conservative)" },
+    { cagrPct: 8, cagrLabel: "8% CAGR (Balanced)" },
+    { cagrPct: 12, cagrLabel: "12% CAGR (Historical Nifty)" },
+    { cagrPct: 15, cagrLabel: "15% CAGR (Aggressive)" },
+  ];
+  const rateTable: RateRecoveryHorizon[] = benchmarkRates.map(({ cagrPct, cagrLabel }) => {
+    const r = cagrPct / 100.0;
+    const tYears = a / Math.log(1.0 + r);
+    return {
+      cagrPct,
+      cagrLabel,
+      recoveryYears: Number(tYears.toFixed(1)),
+    };
+  });
+
+  let driftImpliedYears: number | null = null;
+  let driftImpliedDisplay = "Indefinite (Drift <= 0%)";
+  if (mu > 0) {
+    driftImpliedYears = Number((a / mu).toFixed(1));
+    driftImpliedDisplay = `${driftImpliedYears} yrs`;
+  }
+
+  let pFirstPassage = 0;
+  let pTerminal = 0;
+
+  if (sigma <= 1e-4) {
+    if (mu > 0 && mu * H >= a) {
+      pFirstPassage = 100;
+      pTerminal = 100;
+    }
+  } else {
+    const denom = sigma * Math.sqrt(H);
+    const z1 = (mu * H - a) / denom;
+    const z2 = (-mu * H - a) / denom;
+
+    const pTermVal = normalCdf(z1);
+    pTerminal = Number((Math.min(1.0, Math.max(0.0, pTermVal)) * 100).toFixed(1));
+
+    const exponent = Math.min(500.0, (2.0 * mu * a) / (sigma * sigma));
+    const expTerm = Math.exp(exponent);
+    const firstPassageVal = normalCdf(z1) + expTerm * normalCdf(z2);
+    pFirstPassage = Number((Math.min(1.0, Math.max(0.0, firstPassageVal)) * 100).toFixed(1));
+  }
+
+  return {
+    initialValue: Math.round(v0),
+    postValue: Math.round(vp),
+    isDrawdown: true,
+    lossInr: Math.round(lossInr),
+    lossPct,
+    returnNeededPct,
+    driftImpliedYears,
+    driftImpliedDisplay,
+    probRecoveringWithinHorizonPct: pFirstPassage,
+    probRecoveredAtHorizonPct: pTerminal,
+    horizonYears: H,
+    annualVolPct: Number(annualVolPct.toFixed(1)),
+    annualDriftPct: Number(annualDriftPct.toFixed(1)),
+    rateTable,
+    statusLabel: `Drawdown: -${lossPct}%`,
+    disclaimer: "Model-derived estimate assuming geometric Brownian motion with constant drift and volatility. Capital preserved under simulated shock is a model result, not a guaranteed outcome.",
+  };
+}
+
+export function calculateRecoveryComparison(
+  vInitial: number,
+  unhedgedEndingValue: number,
+  hedgedEndingValue: number,
+  unhedgedVol = 13.5,
+  hedgedVol = 10.5,
+  annualDriftPct = 10.0,
+  horizonYears = 3.0,
+): RecoveryAnalysisResult {
+  const unhedged = calculateRecoveryEstimate(vInitial, unhedgedEndingValue, unhedgedVol, annualDriftPct, horizonYears);
+  const hedged = calculateRecoveryEstimate(vInitial, hedgedEndingValue, hedgedVol, annualDriftPct, horizonYears);
+  const capitalPreservedInr = Math.max(0, Math.round(hedgedEndingValue - unhedgedEndingValue));
+  const yearsSaved =
+    unhedged.driftImpliedYears !== null && hedged.driftImpliedYears !== null
+      ? Number((unhedged.driftImpliedYears - hedged.driftImpliedYears).toFixed(1))
+      : 0;
+  const probBoostPct = Number((hedged.probRecoveringWithinHorizonPct - unhedged.probRecoveringWithinHorizonPct).toFixed(1));
+
+  return {
+    unhedged,
+    hedged,
+    capitalPreservedInr,
+    yearsSaved,
+    probBoostPct,
+    isDrawdown: unhedged.isDrawdown,
+  };
+}
+

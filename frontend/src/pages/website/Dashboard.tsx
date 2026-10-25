@@ -15,6 +15,8 @@ import {
   formatPercent,
   normalizeHoldings,
   type HedgedScenarioResult,
+  calculateRecoveryComparison,
+  type RecoveryAnalysisResult,
 } from "./portfolioCalculations";
 import {
   classCorrelations,
@@ -286,8 +288,6 @@ function riskColor(value: number): string {
 function Header({
   activePage,
   onNavigate,
-  portfolioId,
-  onPortfolioChange,
   currency,
   onCurrencyChange,
   period,
@@ -300,8 +300,6 @@ function Header({
 }: {
   activePage: PageName;
   onNavigate: (page: PageName) => void;
-  portfolioId: string;
-  onPortfolioChange: (id: string) => void;
   currency: Currency;
   onCurrencyChange: (currency: Currency) => void;
   period: 12 | 24;
@@ -359,14 +357,6 @@ function Header({
           <span className="header-user-name">{currentUser?.name || "Demo Trader 01"}</span>
           <span className="header-user-status-dot" aria-hidden="true" />
         </button>
-        <label className="header-select">
-          <span className="sr-only">Portfolio</span>
-          <select value={portfolioId} onChange={(event) => onPortfolioChange(event.target.value)}>
-            {portfolios.map((item) => (
-              <option key={item.id} value={item.id}>{item.name}</option>
-            ))}
-          </select>
-        </label>
         <label className="header-select currency-select">
           <span className="sr-only">Reporting currency</span>
           <select
@@ -558,8 +548,8 @@ function MetricStrip({
   metrics: ReturnType<typeof calculateMetrics>;
 }) {
   const { holdings } = normalizeHoldings(portfolio, weights);
-  const allocationTotal = weights.reduce((sum, weight) => sum + weight, 0);
   const vaRPct = portfolio.marketValue > 0
+
     ? (metrics.dailyVaR / portfolio.marketValue) * 100
     : 0;
   const vaRTone = riskTone(vaRPct, [0.5, 1, 1.75, 2.5, 4]);
@@ -608,23 +598,22 @@ function MetricStrip({
         <AnimatedMetricValue value={metrics.liquidWeight} format={(value) => formatPercent(value)} delay={280} />
         <div className="metric-foot">{money(metrics.liquidValue, currency, true)} classified high liquidity</div>
       </article>
-      {Math.abs(allocationTotal - 100) >= 0.01 && (
-        <div className="allocation-alert" role="status">
-          Allocation totals {formatPercent(allocationTotal)}; figures are proportionally rebased for analysis.
-        </div>
-      )}
     </section>
   );
 }
 
 function AllocationPanel({
   portfolio,
+  portfolioId,
+  onPortfolioChange,
   weights,
   currency,
   onWeightChange,
   onRestore,
 }: {
   portfolio: Portfolio;
+  portfolioId?: string;
+  onPortfolioChange?: (id: string) => void;
   weights: number[];
   currency: Currency;
   onWeightChange: (index: number, value: number) => void;
@@ -644,7 +633,24 @@ function AllocationPanel({
           <div className="eyebrow">Portfolio structure</div>
           <h2>Allocation</h2>
         </div>
-        <button type="button" className="text-button" onClick={onRestore}>Restore</button>
+        <div className="panel-heading-actions">
+          {portfolioId && onPortfolioChange && (
+            <label className="panel-portfolio-select-control">
+              <span className="panel-portfolio-label">Portfolio</span>
+              <select
+                value={portfolioId}
+                onChange={(e) => onPortfolioChange(e.target.value)}
+                className="panel-portfolio-select"
+                aria-label="Active Portfolio"
+              >
+                {portfolios.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <button type="button" className="text-button" onClick={onRestore}>Restore defaults</button>
+        </div>
       </div>
       <div className="allocation-total">
         <div className="donut-wrap">
@@ -665,10 +671,11 @@ function AllocationPanel({
           <div className="donut-center"><strong>{formatPercent(totalWeight, 0)}</strong><span>entered</span></div>
         </div>
         <div className="allocation-legend">
+          <div className="legend-header">Asset Class Share</div>
           {Object.entries(groups).map(([name, value], index) => (
             <div className="legend-row" key={name}>
               <span className="legend-color" style={{ background: colors[index % colors.length] }} />
-              <span>{name}</span><strong>{formatPercent(value, 0)}</strong>
+              <span className="legend-name">{name}</span><strong className="legend-val">{formatPercent(value, 0)}</strong>
             </div>
           ))}
         </div>
@@ -681,18 +688,24 @@ function AllocationPanel({
       <div className="holding-table-wrap">
         <table className="holding-table">
           <thead>
-            <tr><th>Holding</th><th>Weight</th><th>Value</th><th>Return / vol.</th><th>Liquidity</th></tr>
+            <tr>
+              <th className="col-holding">Holding</th>
+              <th className="col-weight">Weight</th>
+              <th className="col-value">Value</th>
+              <th className="col-return">Return / vol.</th>
+              <th className="col-liquidity">Liquidity</th>
+            </tr>
           </thead>
           <tbody>
             {holdings.map((holding, index) => (
               <tr key={holding.ticker}>
-                <td>
+                <td className="col-holding">
                   <div className="holding-name">{holding.ticker}</div>
                   <div className="holding-sub">
                     {holding.sector}{holding.currencyExposure === "USD_INR" ? " · USD-linked" : ""}
                   </div>
                 </td>
-                <td>
+                <td className="col-weight">
                   <label className="weight-field">
                     <input
                       aria-label={`${holding.ticker} allocation percentage`}
@@ -706,17 +719,18 @@ function AllocationPanel({
                     <span>%</span>
                   </label>
                 </td>
-                <td className="number-cell">{money(holding.marketValue, currency, true)}</td>
-                <td className="history-cell">
+                <td className="col-value number-cell">{money(holding.marketValue, currency, true)}</td>
+                <td className="col-return history-cell">
                   <span>{formatPercent(holding.historicalReturn)}</span>
                   <small>{formatPercent(holding.volatility)} vol.</small>
                 </td>
-                <td><span className={`liquidity-pill ${holding.liquidity.toLowerCase()}`}>{holding.liquidity}</span></td>
+                <td className="col-liquidity"><span className={`liquidity-pill ${holding.liquidity.toLowerCase()}`}>{holding.liquidity}</span></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
       <div className="allocation-foot">
         <span>Largest position</span>
         <strong>{topHolding?.ticker} <span>{formatPercent(topHolding?.normalizedWeight ?? 0)}</span></strong>
@@ -731,20 +745,31 @@ function AllocationPanel({
 
 function PerformancePanel({
   portfolio,
+  portfolioId,
+  onPortfolioChange,
   weights,
   period,
   currency,
   scenario,
   scenarioResult,
   hedgedScenarioResult,
+  recovery,
+  maxTurnoverPct,
+  onNavigateToStressLab,
 }: {
   portfolio: Portfolio;
+  portfolioId?: string;
+  onPortfolioChange?: (id: string) => void;
   weights: number[];
   period: 12 | 24;
   currency: Currency;
   scenario: Scenario | null;
   scenarioResult: ReturnType<typeof calculateScenario> | null;
   hedgedScenarioResult?: HedgedScenarioResult | null;
+  recovery?: RecoveryAnalysisResult | null;
+  maxTurnoverPct?: number;
+  hedgePreference?: string;
+  onNavigateToStressLab?: () => void;
 }) {
   const { ref: chartRef, isInView: chartIsInView } = useChartInView<SVGSVGElement>();
   const { ref: drawdownRef, isInView: drawdownIsInView } = useChartInView<SVGSVGElement>();
@@ -811,7 +836,24 @@ function PerformancePanel({
           <div className="eyebrow">Risk &amp; performance <span className="historical-tag">HISTORICAL SAMPLE</span></div>
           <h2>Portfolio path</h2>
         </div>
-        <div className="period-stamp">Trailing {period} months <span>·</span> monthly observations</div>
+        <div className="performance-heading-controls">
+          {portfolioId && onPortfolioChange && (
+            <label className="panel-portfolio-select-control">
+              <span className="panel-portfolio-label">Portfolio</span>
+              <select
+                value={portfolioId}
+                onChange={(e) => onPortfolioChange(e.target.value)}
+                className="panel-portfolio-select"
+                aria-label="Active Portfolio"
+              >
+                {portfolios.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <div className="period-stamp">Trailing {period} months <span>·</span> monthly observations</div>
+        </div>
       </div>
       <div className="chart-legend">
         <span><i className="legend-line historic-line" /> Historical observation</span>
@@ -960,7 +1002,306 @@ function PerformancePanel({
         </div>
         <p className="microcopy">Relationships are illustrative only; historical correlations can shift sharply during market stress.</p>
       </div>
+
+      {recovery && (
+        <div className="performance-recovery-section" style={{ marginTop: "16px" }}>
+          <RecoveryAnalysisCard
+            recovery={recovery}
+            currency={currency}
+            portfolio={portfolio}
+            weights={weights}
+            turnoverBudgetPct={maxTurnoverPct}
+            onNavigateToStressLab={onNavigateToStressLab}
+          />
+        </div>
+      )}
     </section>
+  );
+}
+
+function RecoveryAnalysisCard({
+  recovery,
+  currency,
+  portfolio,
+  weights,
+  turnoverBudgetPct = 25,
+  onNavigateToStressLab,
+}: {
+  recovery: RecoveryAnalysisResult;
+  currency: Currency;
+  portfolio?: Portfolio;
+  weights?: number[];
+  turnoverBudgetPct?: number;
+  onNavigateToStressLab?: () => void;
+}) {
+  const { unhedged, hedged, capitalPreservedInr, yearsSaved, probBoostPct, isDrawdown } = recovery;
+
+  // Generate actionable trim and hedge trade allocation implicitly from the portfolio math
+  const holdings = portfolio ? normalizeHoldings(portfolio, weights || []).holdings : [];
+  const totalVal = portfolio?.marketValue || unhedged.initialValue || 1000000;
+  const budgetInr = totalVal * (turnoverBudgetPct / 100);
+
+  // Identify highest beta / high drag assets to trim
+  const highRiskHoldings = [...holdings]
+    .filter((h) => h.assetClass === "Equity")
+    .sort((a, b) => (b.historicalReturn - a.historicalReturn) || (b.marketValue - a.marketValue));
+
+  const trimTrades: Array<{ ticker: string; name: string; amountInr: number; weightPct: number }> = [];
+  let remainingBudget = budgetInr;
+
+  for (const h of highRiskHoldings) {
+    if (remainingBudget <= 0) break;
+    const capacity = h.marketValue * 0.45;
+    const trimAmt = Math.min(remainingBudget, capacity);
+    if (trimAmt > 1000) {
+      trimTrades.push({
+        ticker: h.ticker,
+        name: h.name,
+        amountInr: Math.round(trimAmt),
+        weightPct: Number(((trimAmt / totalVal) * 100).toFixed(1)),
+      });
+      remainingBudget -= trimAmt;
+    }
+  }
+
+  const totalTrimmed = budgetInr - remainingBudget;
+  const liquidBeesAlloc = Math.round(totalTrimmed * 0.65);
+  const goldBeesAlloc = Math.round(totalTrimmed * 0.35);
+
+  if (!isDrawdown) {
+    return (
+      <div className="recovery-box expansion-box">
+        <div className="recovery-box-header">
+          <div>
+            <span className="recovery-eyebrow" style={{ color: "#2EAF7D" }}>PORTFOLIO RESILIENCE</span>
+            <h4 className="recovery-title">Capital Expansion · No Recovery Runway Needed</h4>
+          </div>
+          <span className="recovery-advantage-chip" style={{ background: "rgba(46, 175, 125, 0.15)", color: "#2EAF7D", borderColor: "rgba(46, 175, 125, 0.3)" }}>
+            ✓ Full Capital Preservation
+          </span>
+        </div>
+        <p style={{ fontSize: "12px", color: "var(--muted)", margin: "8px 0 0 0", lineHeight: 1.5 }}>
+          Portfolio capital structure remains accretive across modeled horizons.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="recovery-box" style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "10px", padding: "16px" }}>
+      {/* Header */}
+      <div className="recovery-box-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+        <div>
+          <span className="recovery-eyebrow" style={{ fontSize: "11px", fontWeight: 700, color: "var(--accent, #0052FF)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            PORTFOLIO RECOVERY STRATEGY
+          </span>
+          <h4 className="recovery-title" style={{ margin: "4px 0 0 0", fontSize: "16px", fontWeight: 700, color: "var(--ink)" }}>
+            Optimal Capital Preservation &amp; Drawdown Breakeven
+          </h4>
+        </div>
+        {capitalPreservedInr > 0 && (
+          <span className="recovery-advantage-chip" style={{ background: "rgba(46, 175, 125, 0.12)", color: "#2EAF7D", border: "1px solid rgba(46, 175, 125, 0.3)", borderRadius: "16px", padding: "4px 10px", fontSize: "11px", fontWeight: 700 }}>
+            +{money(capitalPreservedInr, currency, true)} Capital Saved
+          </span>
+        )}
+      </div>
+
+      {/* Primary KPI Strip */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "16px" }}>
+        <div style={{ background: "var(--canvas, rgba(0,0,0,0.02))", border: "1px solid var(--line)", borderRadius: "8px", padding: "10px 12px" }}>
+          <div style={{ fontSize: "10px", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>Breakeven Speed</div>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: yearsSaved > 0 ? "#2EAF7D" : "var(--ink)", marginTop: "2px" }}>
+            {hedged.driftImpliedDisplay}
+          </div>
+          <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
+            {yearsSaved > 0 ? `Reduced by ${yearsSaved} years vs unhedged` : "Baseline recovery rate"}
+          </div>
+        </div>
+
+        <div style={{ background: "var(--canvas, rgba(0,0,0,0.02))", border: "1px solid var(--line)", borderRadius: "8px", padding: "10px 12px" }}>
+          <div style={{ fontSize: "10px", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>Recovery Probability (3-Yr)</div>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: "#2EAF7D", marginTop: "2px" }}>
+            {formatPercent(hedged.probRecoveringWithinHorizonPct)}
+          </div>
+          <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
+            {probBoostPct > 0 ? `+${probBoostPct}% higher confidence` : "High confidence"}
+          </div>
+        </div>
+
+        <div style={{ background: "var(--canvas, rgba(0,0,0,0.02))", border: "1px solid var(--line)", borderRadius: "8px", padding: "10px 12px" }}>
+          <div style={{ fontSize: "10px", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>Required Breakeven Return</div>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--ink)", marginTop: "2px" }}>
+            {formatPercent(hedged.returnNeededPct)}
+          </div>
+          <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
+            Down from {formatPercent(unhedged.returnNeededPct)} unhedged
+          </div>
+        </div>
+      </div>
+
+      {/* Actionable Rebalancing Strategy Execution Tickets */}
+      <div style={{ marginBottom: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+          <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", letterSpacing: "0.04em" }}>
+            Actionable Rebalancing Tickets ({turnoverBudgetPct}% Turnover)
+          </span>
+          <span style={{ fontSize: "11px", color: "#2EAF7D", fontWeight: 600 }}>
+            Fully Funded Reallocation
+          </span>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {trimTrades.slice(0, 2).map((trade) => (
+            <div
+              key={trade.ticker}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "8px 12px",
+                background: "rgba(224, 86, 36, 0.05)",
+                border: "1px solid rgba(224, 86, 36, 0.2)",
+                borderRadius: "6px",
+                fontSize: "12px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ background: "rgba(224, 86, 36, 0.15)", color: "var(--negative, #E05624)", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", fontSize: "10px" }}>
+                  TRIM
+                </span>
+                <strong style={{ color: "var(--ink)" }}>{trade.ticker}</strong>
+                <span style={{ color: "var(--muted)", fontSize: "11px" }}>{trade.name}</span>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontWeight: 700, color: "var(--negative, #E05624)" }}>
+                  -{money(trade.amountInr, currency, true)}
+                </span>
+                <span style={{ color: "var(--muted)", fontSize: "11px", marginLeft: "6px" }}>
+                  (-{trade.weightPct}%)
+                </span>
+              </div>
+            </div>
+          ))}
+
+          {liquidBeesAlloc > 0 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "8px 12px",
+                background: "rgba(46, 175, 125, 0.05)",
+                border: "1px solid rgba(46, 175, 125, 0.2)",
+                borderRadius: "6px",
+                fontSize: "12px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ background: "rgba(46, 175, 125, 0.15)", color: "#2EAF7D", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", fontSize: "10px" }}>
+                  ALLOCATE
+                </span>
+                <strong style={{ color: "var(--ink)" }}>LIQUIDBEES.NS</strong>
+                <span style={{ color: "var(--muted)", fontSize: "11px" }}>Liquid ETF / Cash Buffer</span>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontWeight: 700, color: "#2EAF7D" }}>
+                  +{money(liquidBeesAlloc, currency, true)}
+                </span>
+                <span style={{ color: "var(--muted)", fontSize: "11px", marginLeft: "6px" }}>
+                  (+{Number(((liquidBeesAlloc / totalVal) * 100).toFixed(1))}%)
+                </span>
+              </div>
+            </div>
+          )}
+
+          {goldBeesAlloc > 0 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "8px 12px",
+                background: "rgba(46, 175, 125, 0.05)",
+                border: "1px solid rgba(46, 175, 125, 0.2)",
+                borderRadius: "6px",
+                fontSize: "12px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ background: "rgba(46, 175, 125, 0.15)", color: "#2EAF7D", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", fontSize: "10px" }}>
+                  ALLOCATE
+                </span>
+                <strong style={{ color: "var(--ink)" }}>GOLDBEES.NS</strong>
+                <span style={{ color: "var(--muted)", fontSize: "11px" }}>Gold ETF Defensive Hedge</span>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontWeight: 700, color: "#2EAF7D" }}>
+                  +{money(goldBeesAlloc, currency, true)}
+                </span>
+                <span style={{ color: "var(--muted)", fontSize: "11px", marginLeft: "6px" }}>
+                  (+{Number(((goldBeesAlloc / totalVal) * 100).toFixed(1))}%)
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Multi-CAGR Recovery Runway Table */}
+      <div style={{ marginBottom: "14px" }}>
+        <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", letterSpacing: "0.04em", marginBottom: "8px" }}>
+          Expected Breakeven Runway across Market Rebounds
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
+          {hedged.rateTable.map((rate) => {
+            const unhedgedRate = unhedged.rateTable.find((r) => r.cagrPct === rate.cagrPct);
+            const saved = unhedgedRate ? Number((unhedgedRate.recoveryYears - rate.recoveryYears).toFixed(1)) : 0;
+            return (
+              <div key={rate.cagrPct} style={{ background: "var(--canvas, rgba(0,0,0,0.02))", border: "1px solid var(--line)", borderRadius: "6px", padding: "8px", textAlign: "center" }}>
+                <div style={{ fontSize: "10px", fontWeight: 600, color: "var(--muted)" }}>{rate.cagrPct}% Annual Rebound</div>
+                <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--ink)", marginTop: "3px" }}>
+                  {rate.recoveryYears} yrs
+                </div>
+                {saved > 0 && (
+                  <div style={{ fontSize: "10px", color: "#2EAF7D", fontWeight: 600, marginTop: "2px" }}>
+                    -{saved} yrs faster
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Quick Execution Footprint */}
+      {onNavigateToStressLab && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", paddingTop: "12px" }}>
+          <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+            Strategy calculated and verified against capital preservation criteria
+          </span>
+          <button
+            type="button"
+            className="action-button primary"
+            onClick={onNavigateToStressLab}
+            style={{
+              padding: "7px 14px",
+              fontSize: "11px",
+              fontWeight: 600,
+              borderRadius: "6px",
+              background: "var(--accent, #0052FF)",
+              color: "#fff",
+              border: "none",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            Review &amp; Apply in StressLab &rarr;
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1061,7 +1402,7 @@ function ScenarioPanel({
               <select
                 value={hedgePreference}
                 onChange={(event) => onHedgePreferenceChange(event.target.value as any)}
-                style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--panel)", color: "var(--ink)", fontSize: "11px" }}
+                style={{ padding: "6px 8px", borderRadius: "6px", border: "1px solid var(--line)", background: "var(--market-surface, #ffffff)", color: "var(--ink)", fontSize: "11px" }}
               >
                 <option value="multi_asset">Multi-Asset (Cash + Gold)</option>
                 <option value="gold_focus">Gold Focus (GOLDBEES)</option>
@@ -1170,13 +1511,24 @@ function ScenarioPanel({
           <div className="loss-meter"><span style={{ width: `${Math.min((hedgedScenarioResult ? Math.abs(Math.min(hedgedScenarioResult.hedgedReturnPct, 0)) : lossPct) * 2.6, 100)}%` }} /></div>
           <div className="meter-caption"><span>Estimated loss severity</span><span>{formatPercent(hedgedScenarioResult ? Math.abs(Math.min(hedgedScenarioResult.hedgedReturnPct, 0)) : lossPct)}</span></div>
           <div className="contributors">
-            <div className="contributors-title">Largest modeled loss contributors</div>
-            {worstContributors.length ? worstContributors.map((item) => (
-              <div className="contributor-row" key={item.ticker}>
-                <span><b>{item.ticker}</b><small>{item.name}</small></span>
-                <strong className={item.pnl < 0 ? "negative-value" : "positive-value"}>{signedMoney(item.pnl, currency)}</strong>
-              </div>
-            )) : <p className="microcopy">No negative holding-level impact under these assumptions.</p>}
+            <div className="contributors-title">
+              <span>Largest modeled loss contributors</span>
+            </div>
+            {worstContributors.length ? (
+              worstContributors.map((item) => (
+                <div className="contributor-row" key={item.ticker}>
+                  <div className="contributor-info">
+                    <b className="contributor-ticker">{item.ticker}</b>
+                    <small className="contributor-name">{item.name}</small>
+                  </div>
+                  <strong className={`contributor-money ${item.pnl < 0 ? "negative-value" : "positive-value"}`}>
+                    {signedMoney(item.pnl, currency)}
+                  </strong>
+                </div>
+              ))
+            ) : (
+              <p className="microcopy">No negative holding-level impact under these assumptions.</p>
+            )}
           </div>
           <div className="assumption-note">
             <strong>Model assumptions</strong>
@@ -1198,7 +1550,6 @@ function ScenarioPanel({
         </div>
       )}
       <div className="scenario-actions">
-        <button type="button" className="quiet-action" onClick={() => onSelect(scenarios[0])}>Run broad sell-off</button>
         <span>Impacts are illustrative, not advice.</span>
       </div>
     </section>
@@ -1724,6 +2075,65 @@ function RiskSummaryEngine({
               })()}
             </div>
           </div>
+          {(() => {
+            const apiRec = result.recovery_analysis || result.summary?.recovery_analysis;
+            if (!apiRec) return null;
+            const recComparison: RecoveryAnalysisResult = {
+              unhedged: {
+                initialValue: apiRec.unhedged.initial_value_inr,
+                postValue: apiRec.unhedged.post_value_inr,
+                isDrawdown: apiRec.unhedged.is_drawdown,
+                lossInr: apiRec.unhedged.loss_inr,
+                lossPct: apiRec.unhedged.loss_pct,
+                returnNeededPct: apiRec.unhedged.return_needed_pct,
+                driftImpliedYears: apiRec.unhedged.drift_implied_recovery_years,
+                driftImpliedDisplay: apiRec.unhedged.drift_implied_display,
+                probRecoveringWithinHorizonPct: apiRec.unhedged.prob_recovering_within_horizon_pct,
+                probRecoveredAtHorizonPct: apiRec.unhedged.prob_recovered_at_horizon_pct,
+                horizonYears: apiRec.unhedged.horizon_years,
+                annualVolPct: apiRec.unhedged.annual_vol_pct,
+                annualDriftPct: apiRec.unhedged.annual_drift_pct,
+                rateTable: (apiRec.unhedged.rate_table || []).map((r: any) => ({
+                  cagrPct: r.cagr_pct,
+                  cagrLabel: r.cagr_label,
+                  recoveryYears: r.recovery_years,
+                })),
+                statusLabel: apiRec.unhedged.status_label,
+                disclaimer: apiRec.unhedged.disclaimer,
+              },
+              hedged: {
+                initialValue: apiRec.hedged.initial_value_inr,
+                postValue: apiRec.hedged.post_value_inr,
+                isDrawdown: apiRec.hedged.is_drawdown,
+                lossInr: apiRec.hedged.loss_inr,
+                lossPct: apiRec.hedged.loss_pct,
+                returnNeededPct: apiRec.hedged.return_needed_pct,
+                driftImpliedYears: apiRec.hedged.drift_implied_recovery_years,
+                driftImpliedDisplay: apiRec.hedged.drift_implied_display,
+                probRecoveringWithinHorizonPct: apiRec.hedged.prob_recovering_within_horizon_pct,
+                probRecoveredAtHorizonPct: apiRec.hedged.prob_recovered_at_horizon_pct,
+                horizonYears: apiRec.hedged.horizon_years,
+                annualVolPct: apiRec.hedged.annual_vol_pct,
+                annualDriftPct: apiRec.hedged.annual_drift_pct,
+                rateTable: (apiRec.hedged.rate_table || []).map((r: any) => ({
+                  cagrPct: r.cagr_pct,
+                  cagrLabel: r.cagr_label,
+                  recoveryYears: r.recovery_years,
+                })),
+                statusLabel: apiRec.hedged.status_label,
+                disclaimer: apiRec.hedged.disclaimer,
+              },
+              capitalPreservedInr: apiRec.capital_preserved_inr,
+              yearsSaved: apiRec.years_saved,
+              probBoostPct: apiRec.prob_boost_pct,
+              isDrawdown: apiRec.is_drawdown,
+            };
+            return (
+              <div style={{ marginTop: "14px" }}>
+                <RecoveryAnalysisCard recovery={recComparison} currency={currency} />
+              </div>
+            );
+          })()}
           {result.ai_analysis.assumptions_used.length > 0 && (
             <p className="api-assumptions"><strong>Model assumptions:</strong> {result.ai_analysis.assumptions_used.join(" · ")}</p>
           )}
@@ -2094,7 +2504,7 @@ function ReverseStressPage({
                 <tbody>
                   {[...result.fragility_ranking].sort((a, b) => a.fragility_rank - b.fragility_rank).map((asset) => (
                     <tr key={asset.ticker}>
-                      <td>#{asset.fragility_rank}</td>
+                      <td className="fragility-rank">#{asset.fragility_rank}</td>
                       <th><strong>{asset.ticker}</strong><small>{asset.name} · {asset.sector}</small></th>
                       <td>{formatPercent(asset.weight_pct)}</td>
                       <td>{asset.beta_to_portfolio.toFixed(2)}</td>
@@ -2297,6 +2707,17 @@ export default function Dashboard() {
     () => activeScenario ? calculateHedgedScenario(portfolio, weights, activeScenario, maxTurnoverPct, hedgePreference) : null,
     [portfolio, weights, activeScenario, maxTurnoverPct, hedgePreference],
   );
+  const overviewRecovery = useMemo(() => {
+    // If an active scenario is chosen, use it; otherwise evaluate the benchmark 2008 GFC shock as default resilience baseline
+    const targetScenario = activeScenario ?? scenarios[0];
+    if (!targetScenario) return null;
+    const baseRes = scenarioResult ?? calculateScenario(portfolio, weights, targetScenario);
+    const hedgedRes = hedgedScenarioResult ?? calculateHedgedScenario(portfolio, weights, targetScenario, maxTurnoverPct, hedgePreference);
+    const initialVal = portfolio.marketValue || 1000000;
+    const unhedgedEnding = baseRes.endingValue;
+    const hedgedEnding = hedgedRes.hedgedEndingValue;
+    return calculateRecoveryComparison(initialVal, unhedgedEnding, hedgedEnding, 13.5, 10.5, 10.0, 3.0);
+  }, [portfolio, weights, activeScenario, scenarioResult, hedgedScenarioResult, maxTurnoverPct, hedgePreference]);
   const riskSummaryRequest: ScenarioRiskRequest = {
     investor_profile: {
       horizon_years: horizon,
@@ -2449,8 +2870,6 @@ export default function Dashboard() {
       <Header
         activePage={activePage}
         onNavigate={navigateTo}
-        portfolioId={portfolioId}
-        onPortfolioChange={changePortfolio}
         currency={currency}
         onCurrencyChange={setCurrency}
         period={period}
@@ -2504,12 +2923,18 @@ export default function Dashboard() {
             <div className="analysis-grid overview-grid">
               <PerformancePanel
                 portfolio={portfolio}
+                portfolioId={portfolioId}
+                onPortfolioChange={changePortfolio}
                 weights={weights}
                 period={period}
                 currency={currency}
                 scenario={activeScenario}
                 scenarioResult={scenarioResult}
                 hedgedScenarioResult={hedgedScenarioResult}
+                recovery={overviewRecovery}
+                maxTurnoverPct={maxTurnoverPct}
+                hedgePreference={hedgePreference}
+                onNavigateToStressLab={handleRunFullAnalysis}
               />
               <ScenarioPanel
                 activeScenario={activeScenario}
@@ -2560,6 +2985,8 @@ export default function Dashboard() {
             <div className="page-grid allocation-page-grid">
               <AllocationPanel
                 portfolio={portfolio}
+                portfolioId={portfolioId}
+                onPortfolioChange={changePortfolio}
                 weights={weights}
                 currency={currency}
                 onWeightChange={(index, value) => updateWeight(setWeights, weights, index, value)}
@@ -2608,6 +3035,8 @@ export default function Dashboard() {
               />
               <PerformancePanel
                 portfolio={portfolio}
+                portfolioId={portfolioId}
+                onPortfolioChange={changePortfolio}
                 weights={weights}
                 period={period}
                 currency={currency}

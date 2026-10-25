@@ -49,7 +49,9 @@ export interface ScenarioRiskResponse {
     max_drawdown_pct: number;
     diversification_score_out_of_100: number;
     "illiquid_ share_pct": number;
+    recovery_analysis?: any;
   };
+  recovery_analysis?: any;
   composition: {
     by_sector: Array<{ sector: string; weight_pct: number }>;
     by_liquidity: Record<string, number>;

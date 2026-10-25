@@ -35,6 +35,15 @@ except ImportError:  # pragma: no cover
     seed_demo_dataset = None
     check_demo_dataset_status = None
 
+try:
+    if __package__:
+        from .news import fetch_live_market_news
+    else:  # pragma: no cover
+        from news import fetch_live_market_news
+except ImportError:  # pragma: no cover
+    fetch_live_market_news = None
+
+
 
 try:
     if __package__:
@@ -489,6 +498,8 @@ def _build_response(
         summary["pain_index"] = metrics["pain_index"]
     if "ulcer_index" in metrics:
         summary["ulcer_index"] = metrics["ulcer_index"]
+    if "recovery_analysis" in metrics:
+        summary["recovery_analysis"] = metrics["recovery_analysis"]
 
     correlation_matrix = _normalize_correlation_matrix(quant_results.get("correlation_matrix"))
     historical = _normalize_historical_series(quant_results.get("historical_series"))
@@ -518,6 +529,7 @@ def _build_response(
 
     return {
         "summary": summary,
+        "recovery_analysis": quant_results.get("recovery_analysis"),
         "composition": _build_composition(portfolio["assets"]),
         "correlation_matrix": correlation_matrix,
         "chart_data": {
@@ -704,5 +716,27 @@ def get_butterfly_visualizer() -> str:
     if not vis_path.is_file():
         raise HTTPException(status_code=404, detail="Visualizer HTML file not found.")
     return vis_path.read_text(encoding="utf-8")
+
+
+@app.get("/api/v1/market/news")
+@app.get("/api/news")
+def get_market_news_feed(
+    query: str | None = None,
+    asset: str | None = None,
+    limit: int = 15,
+) -> list[dict[str, Any]]:
+    """
+    Live Financial Market News Feed:
+    Retrieves real-time RSS market news for Indian markets, enriched with sentiment,
+    scenario triggers, and portfolio ticker exposure mappings.
+    """
+    if fetch_live_market_news is None:
+        raise HTTPException(status_code=503, detail="News service is not available.")
+    try:
+        return fetch_live_market_news(query=query, asset=asset, limit=min(max(1, limit), 50))
+    except Exception as exc:
+        logger.exception("Failed to fetch market news feed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
 
 

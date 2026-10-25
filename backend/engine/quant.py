@@ -688,6 +688,11 @@ def generate_alternative_rebalance(
         f"(₹{annual_opp_cost_inr:,}/yr) in unconstrained bull-market upside."
     )
 
+    rebal_vol = sum(
+        (a["amount_inr"] / total_val) * _get_sector_volatility(a.get("sector", "Other"))
+        for a in proposed_assets
+    ) if proposed_assets else 12.0
+
     return {
         "name": "AI Risk-Adjusted Hedge Allocation",
         "proposed_assets": proposed_assets,
@@ -706,6 +711,164 @@ def generate_alternative_rebalance(
         "annual_opportunity_cost_pct": opp_cost_pct,
         "annual_opportunity_cost_inr": annual_opp_cost_inr,
         "post_rebalance_loss_pct": alt_pct,
+        "rebalanced_volatility_pct": round(rebal_vol, 1),
+    }
+
+
+def compute_recovery_analysis(
+    v_initial: float,
+    v_post: float,
+    annual_vol_pct: float,
+    annual_drift_pct: float = 10.0,
+    horizon_years: float = 3.0,
+) -> Dict[str, Any]:
+    """
+    Quantitative Recovery-Time and First-Passage Probability Engine.
+
+    Calculates:
+    1. Post-crash capital loss percentage from baseline.
+    2. Gain required to achieve full breakeven: ((V0 - V_post) / V_post) * 100.
+    3. Multi-rate recovery horizon table at benchmark CAGRs (5%, 8%, 12%, 15%):
+       T_r = ln(V0 / V_post) / ln(1 + r).
+    4. Drift-implied baseline recovery time:
+       T = ln(V0 / V_post) / mu (when mu > 0).
+    5. First-passage recovery probability (probability of recovering by year H):
+       P(tau <= H) = Phi((mu*H - a)/(sigma*sqrt(H))) + exp(2*mu*a / sigma^2) * Phi((-mu*H - a)/(sigma*sqrt(H)))
+       where a = ln(V0 / V_post) > 0.
+    6. Terminal state recovery probability (probability of being recovered at year H):
+       P(V_H >= V0) = Phi((mu*H - a)/(sigma*sqrt(H))).
+    """
+    v_initial = float(v_initial) if v_initial > 0 else 1000000.0
+    v_post = float(v_post)
+    annual_vol_pct = max(0.0, float(annual_vol_pct))
+    annual_drift_pct = float(annual_drift_pct)
+    horizon_years = max(0.1, float(horizon_years))
+
+    loss_inr = max(0.0, v_initial - v_post)
+    loss_pct = round((loss_inr / v_initial) * 100.0, 2)
+    is_drawdown = v_post < (v_initial - 1.0)
+
+    if not is_drawdown:
+        return {
+            "initial_value_inr": int(round(v_initial)),
+            "post_value_inr": int(round(v_post)),
+            "is_drawdown": False,
+            "loss_inr": 0,
+            "loss_pct": 0.0,
+            "return_needed_pct": 0.0,
+            "drift_implied_recovery_years": 0.0,
+            "drift_implied_display": "0.0 yrs (No drawdown)",
+            "prob_recovering_within_horizon_pct": 100.0,
+            "prob_recovered_at_horizon_pct": 100.0,
+            "horizon_years": horizon_years,
+            "annual_vol_pct": round(annual_vol_pct, 1),
+            "annual_drift_pct": round(annual_drift_pct, 1),
+            "rate_table": [
+                {"cagr_pct": 5.0, "cagr_label": "5% CAGR (Conservative)", "recovery_years": 0.0},
+                {"cagr_pct": 8.0, "cagr_label": "8% CAGR (Balanced)", "recovery_years": 0.0},
+                {"cagr_pct": 12.0, "cagr_label": "12% CAGR (Historical Nifty)", "recovery_years": 0.0},
+                {"cagr_pct": 15.0, "cagr_label": "15% CAGR (Aggressive)", "recovery_years": 0.0},
+            ],
+            "status_label": "Expansion (No drawdown)",
+            "disclaimer": (
+                "Under positive shock scenarios, portfolio value expands beyond baseline, "
+                "so no capital recovery period is required."
+            ),
+        }
+
+    if v_post <= 0.0:
+        return {
+            "initial_value_inr": int(round(v_initial)),
+            "post_value_inr": 0,
+            "is_drawdown": True,
+            "loss_inr": int(round(v_initial)),
+            "loss_pct": 100.0,
+            "return_needed_pct": 999.0,
+            "drift_implied_recovery_years": None,
+            "drift_implied_display": "Indefinite (100% loss)",
+            "prob_recovering_within_horizon_pct": 0.0,
+            "prob_recovered_at_horizon_pct": 0.0,
+            "horizon_years": horizon_years,
+            "annual_vol_pct": round(annual_vol_pct, 1),
+            "annual_drift_pct": round(annual_drift_pct, 1),
+            "rate_table": [],
+            "status_label": "Total Capital Loss",
+            "disclaimer": "Total capital depletion cannot be recovered through compounding alone.",
+        }
+
+    return_needed_pct = round(((v_initial - v_post) / v_post) * 100.0, 2)
+    a = math.log(v_initial / v_post)
+
+    benchmark_rates = [
+        (5.0, "5% CAGR (Conservative)"),
+        (8.0, "8% CAGR (Balanced)"),
+        (12.0, "12% CAGR (Historical Nifty)"),
+        (15.0, "15% CAGR (Aggressive)"),
+    ]
+    rate_table = []
+    for r_pct, label in benchmark_rates:
+        r = r_pct / 100.0
+        t_years = a / math.log(1.0 + r)
+        rate_table.append({
+            "cagr_pct": r_pct,
+            "cagr_label": label,
+            "recovery_years": round(t_years, 1),
+        })
+
+    mu = annual_drift_pct / 100.0
+    if mu > 0:
+        drift_implied_years = round(a / mu, 1)
+        drift_implied_display = f"{drift_implied_years} yrs"
+    else:
+        drift_implied_years = None
+        drift_implied_display = "Indefinite (Drift <= 0%)"
+
+    sigma = annual_vol_pct / 100.0
+    H = horizon_years
+
+    def _norm_cdf(z: float) -> float:
+        return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+    if sigma <= 1e-4:
+        if mu > 0 and (mu * H >= a):
+            p_first_passage = 100.0
+            p_terminal = 100.0
+        else:
+            p_first_passage = 0.0
+            p_terminal = 0.0
+    else:
+        denom = sigma * math.sqrt(H)
+        z1 = (mu * H - a) / denom
+        z2 = (-mu * H - a) / denom
+
+        p_terminal_val = _norm_cdf(z1)
+        p_terminal = round(min(1.0, max(0.0, p_terminal_val)) * 100.0, 1)
+
+        exponent = min(500.0, (2.0 * mu * a) / (sigma ** 2))
+        exp_term = math.exp(exponent)
+        first_passage_val = _norm_cdf(z1) + (exp_term * _norm_cdf(z2))
+        p_first_passage = round(min(1.0, max(0.0, first_passage_val)) * 100.0, 1)
+
+    return {
+        "initial_value_inr": int(round(v_initial)),
+        "post_value_inr": int(round(v_post)),
+        "is_drawdown": True,
+        "loss_inr": int(round(loss_inr)),
+        "loss_pct": loss_pct,
+        "return_needed_pct": return_needed_pct,
+        "drift_implied_recovery_years": drift_implied_years,
+        "drift_implied_display": drift_implied_display,
+        "prob_recovering_within_horizon_pct": p_first_passage,
+        "prob_recovered_at_horizon_pct": p_terminal,
+        "horizon_years": horizon_years,
+        "annual_vol_pct": round(annual_vol_pct, 1),
+        "annual_drift_pct": round(annual_drift_pct, 1),
+        "rate_table": rate_table,
+        "status_label": f"Drawdown: -{loss_pct}%",
+        "disclaimer": (
+            "Model-derived estimate assuming geometric Brownian motion with constant drift and volatility. "
+            "Capital preserved under simulated shock is a model result, not a guaranteed outcome."
+        ),
     }
 
 
@@ -713,7 +876,8 @@ def run_portfolio_scenario(portfolio: Dict[str, Any], scenario_shocks: Dict[str,
     """
     Master Quant Execution Engine.
     Executes primary shocks + secondary transmission matrix spillovers,
-    HHI concentration score, correlation matrix, stochastic cone, and alternative rebalancing.
+    HHI concentration score, correlation matrix, stochastic cone, alternative rebalancing,
+    and rigorous recovery-time estimation.
     """
     portfolio = portfolio or {}
     scenario_shocks = scenario_shocks or {}
@@ -813,6 +977,46 @@ def run_portfolio_scenario(portfolio: Dict[str, Any], scenario_shocks: Dict[str,
     pain_idx = compute_pain_index(hist_values)
     ulcer_idx = compute_ulcer_index(hist_values)
 
+    # Recovery Time Estimation for Unhedged vs Hedged Alternative
+    hedged_stressed_val = float(alt_rebalance.get("stressed_value_median_inr", stressed_assets_val))
+    hedged_vol = float(alt_rebalance.get("rebalanced_volatility_pct", weighted_vol * 0.85))
+
+    unhedged_recovery = compute_recovery_analysis(
+        v_initial=total_val,
+        v_post=stressed_assets_val,
+        annual_vol_pct=weighted_vol,
+        annual_drift_pct=10.0,
+        horizon_years=3.0,
+    )
+
+    hedged_recovery = compute_recovery_analysis(
+        v_initial=total_val,
+        v_post=hedged_stressed_val,
+        annual_vol_pct=hedged_vol if hedged_vol > 0 else weighted_vol,
+        annual_drift_pct=10.0,
+        horizon_years=3.0,
+    )
+
+    capital_preserved = max(0, int(round(hedged_stressed_val - stressed_assets_val)))
+    years_saved = (
+        round(unhedged_recovery["drift_implied_recovery_years"] - hedged_recovery["drift_implied_recovery_years"], 1)
+        if unhedged_recovery["drift_implied_recovery_years"] is not None and hedged_recovery["drift_implied_recovery_years"] is not None
+        else 0.0
+    )
+    prob_boost = round(
+        hedged_recovery["prob_recovering_within_horizon_pct"] - unhedged_recovery["prob_recovering_within_horizon_pct"],
+        1,
+    )
+
+    recovery_summary = {
+        "unhedged": unhedged_recovery,
+        "hedged": hedged_recovery,
+        "capital_preserved_inr": capital_preserved,
+        "years_saved": years_saved,
+        "prob_boost_pct": prob_boost,
+        "is_drawdown": unhedged_recovery["is_drawdown"],
+    }
+
     summary = {
         "total_value_inr": total_val_int,
         "stressed_value_median_inr": stressed_val_int,
@@ -826,6 +1030,7 @@ def run_portfolio_scenario(portfolio: Dict[str, Any], scenario_shocks: Dict[str,
         "cvar_95_pct": round(cvar_95, 2),
         "pain_index": round(pain_idx, 2),
         "ulcer_index": round(ulcer_idx, 2),
+        "recovery_analysis": recovery_summary,
     }
 
     return {
@@ -837,6 +1042,7 @@ def run_portfolio_scenario(portfolio: Dict[str, Any], scenario_shocks: Dict[str,
         "historical_series": chart_data["historical_observations"],
         "hypothetical_cone": chart_data["hypothetical_projection_cone"],
         "alternative_portfolio": alt_rebalance,
+        "recovery_analysis": recovery_summary,
         "_spillover_notes": list(dict.fromkeys(all_spillover_notes)),  # Deduplicated audit log
     }
 

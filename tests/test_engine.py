@@ -1123,6 +1123,166 @@ def test_custom_slider_bounds_and_expansion_scenario():
     assert round(sum(a["weight_pct"] for a in alt_small["proposed_assets"]), 1) == 100.0
 
 
+def test_market_news_service_unit():
+    """Verify backend financial news service formats and enriches news articles."""
+    from backend.news import fetch_live_market_news, clean_html, analyze_article_sentiment
+
+    # 1. HTML tag cleaning and entity decoding
+    assert clean_html("<p>Market &amp; <b>Economy</b></p>") == "Market & Economy"
+    assert clean_html("") == ""
+
+    # 2. Sentiment analysis
+    assert analyze_article_sentiment("Nifty surges to record high on strong earnings rally") == "bullish"
+    assert analyze_article_sentiment("Bank shares plunge amid rising credit risk and inflation probe") == "bearish"
+    assert analyze_article_sentiment("RBI holds policy rates steady amid balanced outlook") == "neutral"
+
+    # 3. Fetch articles
+    articles = fetch_live_market_news(limit=6)
+    assert len(articles) > 0
+    first = articles[0]
+    required_keys = ["id", "headline", "summary", "source", "publishedAt", "sentiment", "suggestedScenarioId"]
+    for key in required_keys:
+        assert key in first, f"Missing required news field '{key}' in article: {first}"
+    assert first["sentiment"] in ("bullish", "bearish", "neutral")
+    assert first["suggestedScenarioId"] in ("crash", "rates", "technology", "fx", "custom")
+
+
+def test_market_news_api_endpoint():
+    """Verify FastAPI routes /api/v1/market/news and /api/news return 200 with enriched schema."""
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    client = TestClient(app)
+    resp1 = client.get("/api/v1/market/news?limit=5")
+
+    assert resp1.status_code == 200
+    data1 = resp1.json()
+    assert isinstance(data1, list)
+    assert len(data1) > 0
+    assert "headline" in data1[0]
+    assert "sentiment" in data1[0]
+
+    # Alias route test
+    resp2 = client.get("/api/news?limit=3")
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert isinstance(data2, list)
+    assert len(data2) > 0
+
+    # Asset filtering test
+    resp3 = client.get("/api/v1/market/news?asset=TCS.NS&limit=5")
+    assert resp3.status_code == 200
+    data3 = resp3.json()
+    assert isinstance(data3, list)
+
+
+def test_compute_recovery_analysis_mathematical_precision():
+    """Verify exact formula calculations for breakeven return, multi-rate table, and GBM probabilities."""
+    from backend.engine.quant import compute_recovery_analysis
+
+    # Benchmark test: ₹10L drops to ₹7L (30% loss)
+    res = compute_recovery_analysis(
+        v_initial=1000000.0,
+        v_post=700000.0,
+        annual_vol_pct=13.5,
+        annual_drift_pct=10.0,
+        horizon_years=3.0,
+    )
+
+    assert res["is_drawdown"] is True
+    assert res["loss_pct"] == 30.0
+    assert abs(res["return_needed_pct"] - 42.86) < 0.05
+    assert res["drift_implied_recovery_years"] == 3.6
+    assert "3.6 yrs" in res["drift_implied_display"]
+
+    # Verify rate table
+    rate_dict = {item["cagr_pct"]: item["recovery_years"] for item in res["rate_table"]}
+    assert abs(rate_dict[5.0] - 7.3) < 0.1
+    assert abs(rate_dict[8.0] - 4.6) < 0.1
+    assert abs(rate_dict[12.0] - 3.1) < 0.1
+    assert abs(rate_dict[15.0] - 2.6) < 0.1
+
+    # Verify First-passage probability P(tau <= 3) >= Terminal probability P(V_3 >= V_0)
+    assert res["prob_recovering_within_horizon_pct"] >= res["prob_recovered_at_horizon_pct"]
+    assert 50.0 <= res["prob_recovering_within_horizon_pct"] <= 55.0
+    assert 38.0 <= res["prob_recovered_at_horizon_pct"] <= 43.0
+
+
+def test_compute_recovery_analysis_edge_cases():
+    """Verify edge case handling: expansion, zero/negative capital, zero volatility, and numerical stability."""
+    from backend.engine.quant import compute_recovery_analysis
+
+    # 1. Expansion mode: V_post > V0
+    exp_res = compute_recovery_analysis(v_initial=1000000.0, v_post=1180000.0, annual_vol_pct=13.5)
+    assert exp_res["is_drawdown"] is False
+    assert exp_res["loss_pct"] == 0.0
+    assert exp_res["return_needed_pct"] == 0.0
+    assert exp_res["drift_implied_recovery_years"] == 0.0
+    assert exp_res["prob_recovering_within_horizon_pct"] == 100.0
+    assert exp_res["prob_recovered_at_horizon_pct"] == 100.0
+
+    # 2. Total loss: V_post <= 0
+    wipeout = compute_recovery_analysis(v_initial=1000000.0, v_post=0.0, annual_vol_pct=13.5)
+    assert wipeout["is_drawdown"] is True
+    assert wipeout["loss_pct"] == 100.0
+    assert wipeout["drift_implied_recovery_years"] is None
+    assert wipeout["prob_recovering_within_horizon_pct"] == 0.0
+    assert wipeout["prob_recovered_at_horizon_pct"] == 0.0
+
+    # 3. Negative drift: mu <= 0
+    neg_drift = compute_recovery_analysis(v_initial=1000000.0, v_post=800000.0, annual_vol_pct=13.5, annual_drift_pct=-2.0)
+    assert neg_drift["drift_implied_recovery_years"] is None
+    assert "Indefinite" in neg_drift["drift_implied_display"]
+
+    # 4. Zero volatility: sigma = 0
+    zero_vol = compute_recovery_analysis(v_initial=1000000.0, v_post=800000.0, annual_vol_pct=0.0, annual_drift_pct=10.0, horizon_years=3.0)
+    # mu * H = 0.30 >= a = ln(10/8) = 0.223, so deterministic recovery within 3 years occurs
+    assert zero_vol["prob_recovering_within_horizon_pct"] == 100.0
+
+    # 5. Numerical stability under catastrophic crash (prevent exp overflow)
+    extreme_crash = compute_recovery_analysis(v_initial=1000000.0, v_post=100.0, annual_vol_pct=1.0, annual_drift_pct=10.0)
+    assert extreme_crash["is_drawdown"] is True
+    assert extreme_crash["prob_recovering_within_horizon_pct"] >= 0.0
+
+
+def test_run_portfolio_scenario_includes_recovery_analysis():
+    """Verify run_portfolio_scenario attaches recovery_analysis comparing unhedged vs hedged alternative."""
+    from backend.engine.quant import run_portfolio_scenario
+
+    portfolio = {
+        "assets": [
+            {"ticker": "TCS.NS", "sector": "IT", "amount_inr": 400000},
+            {"ticker": "INFY.NS", "sector": "IT", "amount_inr": 350000},
+            {"ticker": "HDFCBANK.NS", "sector": "Banking", "amount_inr": 250000},
+        ]
+    }
+    scenario = {
+        "market_decline_pct": -20.0,
+        "interest_rate_change_bps": 50,
+        "sector_shocks": {"IT": -10.0},
+        "recommendation_constraints": {"max_turnover_pct": 25.0},
+    }
+
+    result = run_portfolio_scenario(portfolio, scenario)
+    assert "recovery_analysis" in result
+    assert "recovery_analysis" in result["summary"]
+
+    rec = result["recovery_analysis"]
+    assert "unhedged" in rec
+    assert "hedged" in rec
+    assert "capital_preserved_inr" in rec
+    assert "years_saved" in rec
+    assert "prob_boost_pct" in rec
+
+    # Hedged should have faster or equal recovery time and higher or equal recovery probability
+    assert rec["hedged"]["post_value_inr"] >= rec["unhedged"]["post_value_inr"]
+    if rec["is_drawdown"]:
+        assert rec["hedged"]["return_needed_pct"] <= rec["unhedged"]["return_needed_pct"]
+        assert rec["hedged"]["prob_recovering_within_horizon_pct"] >= rec["unhedged"]["prob_recovering_within_horizon_pct"]
+
+
+
+
 
 
 

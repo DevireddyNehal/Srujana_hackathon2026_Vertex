@@ -285,8 +285,18 @@ export async function getDailyPnL(rangePreset: string = "30d", userId?: string, 
   });
 }
 
-export async function getBreakdown(dimension: "strategy" | "session" | "symbol" | "direction" = "strategy", rangePreset: string = "all", userId?: string, token?: string): Promise<BreakdownItem[]> {
-  return requestJson<BreakdownItem[]>(`/api/v1/analytics/breakdown?dimension=${dimension}&range_preset=${rangePreset}`, {
+export async function getBreakdown(
+  dimension: "overall" | "session" | "strategy" | "symbol" | "direction" = "overall",
+  rangePreset: string = "all",
+  userId?: string,
+  token?: string
+): Promise<BreakdownItem[]> {
+  const query = new URLSearchParams({
+    group_by: dimension,
+    dimension: dimension,
+    range_preset: rangePreset,
+  });
+  return requestJson<BreakdownItem[]>(`/api/v1/analytics/breakdown?${query.toString()}`, {
     headers: getAuthHeaders(userId, token),
   });
 }
@@ -340,5 +350,34 @@ export async function importJournalTradesCsv(
 
   return response.json();
 }
+
+export interface NewsArticle {
+  id: string;
+  headline: string;
+  summary: string;
+  source: string;
+  publishedAt: string;
+  url?: string;
+  relatedAssets?: string[];
+  sentiment?: "bullish" | "bearish" | "neutral";
+  impactEstimate?: string;
+  category?: string;
+  suggestedScenarioId?: "crash" | "rates" | "technology" | "fx" | "custom";
+  isLive?: boolean;
+}
+
+export async function getMarketNews(
+  query?: string,
+  asset?: string,
+  limit?: number,
+): Promise<NewsArticle[]> {
+  const params = new URLSearchParams();
+  if (query) params.append("query", query);
+  if (asset && asset !== "ALL") params.append("asset", asset);
+  if (limit) params.append("limit", limit.toString());
+  const queryString = params.toString() ? `?${params.toString()}` : "";
+  return requestJson<NewsArticle[]>(`/api/v1/market/news${queryString}`);
+}
+
 
 

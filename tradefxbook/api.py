@@ -161,7 +161,7 @@ def list_trades(
     strategy: Optional[str] = Query(None),
     session: Optional[str] = Query(None),
     search: Optional[str] = Query(None, description="Search symbol, notes, or tags"),
-    sort_by: str = Query("exit_time", pattern="^(entry_time|exit_time|net_pnl|gross_pnl|symbol|quantity|realized_r_multiple)$"),
+    sort_by: str = Query("exit_time", pattern="^(created_at|entry_time|exit_time|net_pnl|gross_pnl|symbol|quantity|realized_r_multiple)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc|ASC|DESC)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=500),
@@ -590,17 +590,19 @@ def get_equity_curve(
 
 @router.get("/analytics/breakdown", response_model=List[BreakdownItem])
 def get_breakdowns(
-    group_by: str = Query("strategy", pattern="^(strategy|session|symbol|direction|asset_class)$"),
+    group_by: Optional[str] = Query(None, pattern="^(overall|strategy|session|symbol|direction|asset_class)$"),
+    dimension: Optional[str] = Query(None, pattern="^(overall|strategy|session|symbol|direction|asset_class)$"),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
-    Performance breakdowns grouped by strategy, session, symbol, direction, or asset class.
+    Performance breakdowns grouped by overall portfolio, session, strategy, symbol, or direction.
     """
+    field = group_by or dimension or "overall"
     return get_analytics_breakdown(
         user_id=current_user["id"],
-        group_by_field=group_by,
+        group_by_field=field,
         date_from=date_from,
         date_to=date_to,
     )

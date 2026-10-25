@@ -16,6 +16,16 @@ interface TradingJournalWidgetProps {
   onOpenAuthModal?: () => void;
 }
 
+function toLocalISOString(date: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 export function TradingJournalWidget({
   currentUser,
   authToken,
@@ -52,10 +62,10 @@ export function TradingJournalWidget({
   const [formDirection, setFormDirection] = useState<"LONG" | "SHORT">("LONG");
   const [formStatus, setFormStatus] = useState<"OPEN" | "CLOSED">("CLOSED");
   const [formEntryTime, setFormEntryTime] = useState(() =>
-    new Date(Date.now() - 3600000).toISOString().slice(0, 16)
+    toLocalISOString(new Date(Date.now() - 3600000))
   );
   const [formExitTime, setFormExitTime] = useState(() =>
-    new Date().toISOString().slice(0, 16)
+    toLocalISOString(new Date())
   );
   const [formEntryPrice, setFormEntryPrice] = useState("1.0850");
   const [formExitPrice, setFormExitPrice] = useState("1.0920");
@@ -120,8 +130,8 @@ export function TradingJournalWidget({
     setFormAssetClass("Forex");
     setFormDirection("LONG");
     setFormStatus("CLOSED");
-    setFormEntryTime(new Date(Date.now() - 3600000).toISOString().slice(0, 16));
-    setFormExitTime(new Date().toISOString().slice(0, 16));
+    setFormEntryTime(toLocalISOString(new Date(Date.now() - 3600000)));
+    setFormExitTime(toLocalISOString(new Date()));
     setFormEntryPrice("1.0850");
     setFormExitPrice("1.0920");
     setFormQuantity("1.0");
@@ -185,6 +195,13 @@ export function TradingJournalWidget({
         await updateJournalTrade(editingTrade.id, payload, currentUser.id, authToken || undefined);
       } else {
         await createJournalTrade(payload, currentUser.id, authToken || undefined);
+        setPage(1);
+        if (statusFilter !== "all" && statusFilter !== formStatus.toLowerCase()) {
+          setStatusFilter("all");
+        }
+        if (directionFilter && directionFilter !== formDirection) {
+          setDirectionFilter("");
+        }
       }
       setIsModalOpen(false);
       loadTrades();
@@ -398,7 +415,8 @@ export function TradingJournalWidget({
             onChange={(e) => setSortBy(e.target.value)}
             className="filter-select"
           >
-            <option value="exit_time">Exit Date</option>
+            <option value="exit_time">Exit Date (Most Recent)</option>
+            <option value="created_at">Recently Logged</option>
             <option value="entry_time">Entry Date</option>
             <option value="net_pnl">Net Realized P&L</option>
             <option value="realized_r_multiple">R-Multiple</option>

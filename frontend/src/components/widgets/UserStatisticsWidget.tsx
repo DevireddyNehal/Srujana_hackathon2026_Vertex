@@ -24,7 +24,7 @@ export function UserStatisticsWidget({
 }: UserStatisticsWidgetProps) {
   const [rangePreset, setRangePreset] = useState("all");
   const [sessionFilter, setSessionFilter] = useState("all");
-  const [breakdownDim, setBreakdownDim] = useState<"strategy" | "session" | "symbol" | "direction">("strategy");
+  const [breakdownDim, setBreakdownDim] = useState<"overall" | "session">("overall");
 
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
   const [dailyPnL, setDailyPnL] = useState<DailyPnLPoint[]>([]);
@@ -467,18 +467,21 @@ export function UserStatisticsWidget({
         <div className="breakdown-header">
           <div>
             <h3>🔍 Performance Attribution & Breakdown</h3>
-            <p>Categorical attribution across setups, market sessions, symbols, and directions</p>
+            <p>Categorical attribution across overall trading and market sessions</p>
           </div>
           <div className="breakdown-pills">
-            {(["strategy", "session", "symbol", "direction"] as const).map((dim) => (
-              <button
-                key={dim}
-                className={`dim-pill ${breakdownDim === dim ? "active" : ""}`}
-                onClick={() => setBreakdownDim(dim)}
-              >
-                By {dim.charAt(0).toUpperCase() + dim.slice(1)}
-              </button>
-            ))}
+            <button
+              className={`dim-pill ${breakdownDim === "overall" ? "active" : ""}`}
+              onClick={() => setBreakdownDim("overall")}
+            >
+              Overall
+            </button>
+            <button
+              className={`dim-pill ${breakdownDim === "session" ? "active" : ""}`}
+              onClick={() => setBreakdownDim("session")}
+            >
+              By Session
+            </button>
           </div>
         </div>
 

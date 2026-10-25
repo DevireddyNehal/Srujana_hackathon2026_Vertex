@@ -376,6 +376,22 @@
   gap: 6px;
 }
 
+.news-widget__live-indicator-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: rgba(34, 197, 94, 0.18);
+  color: var(--market-positive, #22c55e);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .news-widget__sentiment-badge {
   display: inline-flex;
   align-items: center;
@@ -830,6 +846,102 @@
   background: #ffffff;
 }
 
+.aperture-app[data-theme='light'] .news-widget__header h2,
+.aperture-app[data-theme='light'] .news-widget__live-text,
+.aperture-app[data-theme='light'] .news-widget__story-headline,
+.aperture-app[data-theme='light'] .news-widget__count strong,
+.aperture-app[data-theme='light'] .news-widget__scenario-title,
+.aperture-app[data-theme='light'] .news-widget__scenario-val,
+.aperture-app[data-theme='light'] .news-widget__scenario-exposure,
+.aperture-app[data-theme='light'] .news-widget__asset-tag strong,
+.aperture-app[data-theme='light'] .news-widget__empty-title {
+  color: #0f172a !important;
+}
+
+.aperture-app[data-theme='light'] .news-widget__intro,
+.aperture-app[data-theme='light'] .news-widget__summary,
+.aperture-app[data-theme='light'] .news-widget__scenario-hint,
+.aperture-app[data-theme='light'] .news-widget__disclaimer,
+.aperture-app[data-theme='light'] .news-widget__empty-desc {
+  color: #475569 !important;
+}
+
+.aperture-app[data-theme='light'] .news-widget__category-badge {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+.aperture-app[data-theme='light'] .news-widget__empty {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.aperture-app[data-theme='light'] .news-widget__empty-reset {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.aperture-app[data-theme='light'] .news-widget__empty-reset:hover {
+  border-color: #059669;
+  color: #059669;
+}
+
+.aperture-app[data-theme='light'] .news-widget__scenario-quote {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+.aperture-app[data-theme='light'] .news-widget__scenario-quote p {
+  color: #1e293b;
+}
+
+.aperture-app[data-theme='light'] .news-widget__scenario-quote small {
+  color: #64748b;
+}
+
+.aperture-app[data-theme='light'] .news-widget__scenario-sentiment-tag--bearish {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+.aperture-app[data-theme='light'] .news-widget__scenario-sentiment-tag--bullish {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.aperture-app[data-theme='light'] .news-widget__scenario-sentiment-tag--neutral {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.aperture-app[data-theme='light'] .news-widget__sentiment-badge--bearish {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #e11d48;
+}
+
+.aperture-app[data-theme='light'] .news-widget__sentiment-badge--bullish {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
+}
+
+.aperture-app[data-theme='light'] .news-widget__sentiment-badge--neutral {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #475569;
+}
+
+.aperture-app[data-theme='light'] .news-widget__scenario-impact.is-downside {
+  color: #e11d48;
+}
+
+.aperture-app[data-theme='light'] .news-widget__scenario-impact.is-upside {
+  color: #059669;
+}
+
 /* Light theme high-contrast button & chip fixes */
 .aperture-app[data-theme='light'] .news-widget__launch-stresslab-btn {
   background: var(--market-positive, #16803d);
@@ -877,3 +989,61 @@
     justify-content: space-between;
   }
 }
+
+/* Overall +2pt Font Size Scaling */
+.news-widget {
+  font-size: 15px;
+}
+.news-widget__header h2 {
+  font-size: clamp(22px, 2.3vw, 26px);
+}
+.news-widget__live-text,
+.news-widget__refresh-btn {
+  font-size: 13px;
+}
+.news-widget__search-input {
+  font-size: 14px;
+}
+.news-widget__chip {
+  font-size: 13px;
+}
+.news-widget__story-headline {
+  font-size: 16px;
+}
+.news-widget__source,
+.news-widget__published {
+  font-size: 13px;
+}
+.news-widget__story-summary {
+  font-size: 14px;
+}
+.news-widget__asset-tag,
+.news-widget__sentiment-badge {
+  font-size: 13px;
+}
+.news-widget__test-scenario-btn {
+  font-size: 13px;
+}
+.news-widget__scenario-quote p {
+  font-size: 14.5px;
+}
+.news-widget__scenario-quote small {
+  font-size: 12.5px;
+}
+.news-widget__scenario-label {
+  font-size: 13px;
+}
+.news-widget__scenario-val {
+  font-size: 14px;
+}
+.news-widget__scenario-impact {
+  font-size: 15px;
+}
+.news-widget__launch-stresslab-btn {
+  font-size: 14px;
+}
+.news-widget__scenario-hint,
+.news-widget__disclaimer p {
+  font-size: 13px;
+}
+

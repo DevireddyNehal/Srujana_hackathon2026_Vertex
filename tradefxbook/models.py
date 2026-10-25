@@ -228,6 +228,11 @@ class BreakdownItem(BaseModel):
     net_pnl: float
     profit_factor: Optional[float] = None
     avg_trade_pnl: float
+    item_name: Optional[str] = None
+    trades_count: Optional[int] = None
+    gross_profit: Optional[float] = None
+    gross_loss: Optional[float] = None
+    average_trade_pnl: Optional[float] = None
 
 
 class PerformanceMetrics(BaseModel):

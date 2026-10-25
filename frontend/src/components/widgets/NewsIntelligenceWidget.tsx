@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+
 import './NewsIntelligenceWidget.css';
 import type { Portfolio } from '../../pages/website/portfolioData';
+import { getMarketNews } from '../../api/client';
 
 export interface NewsArticle {
   id: string;
@@ -14,6 +16,7 @@ export interface NewsArticle {
   impactEstimate?: string;
   category?: string;
   suggestedScenarioId?: 'crash' | 'rates' | 'technology' | 'fx' | 'custom';
+  isLive?: boolean;
 }
 
 export interface NewsIntelligenceWidgetProps {
@@ -22,6 +25,7 @@ export interface NewsIntelligenceWidgetProps {
   currency?: 'INR' | 'USD';
   onNavigateToStressLab?: (headline: string, affectedTicker?: string, scenarioId?: string) => void;
 }
+
 
 const DEFAULT_NEWS_ARTICLES: NewsArticle[] = [
   {
@@ -233,12 +237,18 @@ export const NewsIntelligenceWidget: React.FC<NewsIntelligenceWidgetProps> = ({
   currency = 'INR',
   onNavigateToStressLab,
 }) => {
+  const [liveArticles, setLiveArticles] = useState<NewsArticle[] | null>(null);
+  const [isLiveConnected, setIsLiveConnected] = useState<boolean>(false);
+
   const activeArticles = useMemo(() => {
     if (articles !== undefined) {
       return articles;
     }
+    if (liveArticles && liveArticles.length > 0) {
+      return liveArticles;
+    }
     return DEFAULT_NEWS_ARTICLES;
-  }, [articles]);
+  }, [articles, liveArticles]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAsset, setSelectedAsset] = useState<string>('ALL');
@@ -248,6 +258,29 @@ export const NewsIntelligenceWidget: React.FC<NewsIntelligenceWidgetProps> = ({
   const [lastSyncedTime, setLastSyncedTime] = useState<number>(() => Date.now());
   const [now, setNow] = useState<number>(() => Date.now());
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (articles !== undefined) return;
+    let isSubscribed = true;
+
+    getMarketNews()
+      .then((data) => {
+        if (!isSubscribed) return;
+        if (Array.isArray(data) && data.length > 0) {
+          setLiveArticles(data);
+          setIsLiveConnected(true);
+        }
+      })
+      .catch((err) => {
+        if (!isSubscribed) return;
+        console.warn("Live market news feed unavailable; using curated fallback:", err);
+        setIsLiveConnected(false);
+      });
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [articles]);
 
   // Available asset filters derived from active portfolio holdings or fallback to article assets
   const availableAssetFilters = useMemo(() => {
@@ -284,13 +317,34 @@ export const NewsIntelligenceWidget: React.FC<NewsIntelligenceWidgetProps> = ({
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
-    setTimeout(() => {
-      const timestamp = Date.now();
-      setLastSyncedTime(timestamp);
-      setNow(timestamp);
-      setIsRefreshing(false);
-    }, 450);
+    if (articles === undefined) {
+      getMarketNews()
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setLiveArticles(data);
+            setIsLiveConnected(true);
+          }
+        })
+        .catch((err) => {
+          console.warn("Live market news feed refresh failed:", err);
+        })
+        .finally(() => {
+          const timestamp = Date.now();
+          setLastSyncedTime(timestamp);
+          setNow(timestamp);
+          setIsRefreshing(false);
+        });
+    } else {
+      setTimeout(() => {
+        const timestamp = Date.now();
+        setLastSyncedTime(timestamp);
+        setNow(timestamp);
+        setIsRefreshing(false);
+      }, 450);
+    }
   };
+
+
 
   const filteredArticles = useMemo(() => {
     return activeArticles.filter((article) => {
@@ -431,12 +485,15 @@ export const NewsIntelligenceWidget: React.FC<NewsIntelligenceWidgetProps> = ({
           <div className="news-widget__live-pill">
             <span className="news-widget__live-dot" aria-hidden="true" />
             <span className="news-widget__live-text">
-              {elapsedSeconds < 5 ? 'LIVE • Updated just now' : `LIVE • Updated ${elapsedSeconds}s ago`}
+              {isLiveConnected
+                ? (elapsedSeconds < 5 ? 'LIVE RSS • Updated just now' : `LIVE RSS • Updated ${elapsedSeconds}s ago`)
+                : (elapsedSeconds < 5 ? 'CURATED • Updated just now' : `CURATED • Updated ${elapsedSeconds}s ago`)}
             </span>
             <span className="news-widget__sync-timer">
               Auto-sync: <strong>{String(minutesRemaining).padStart(2, '0')}:{secondsFormatted}</strong>
             </span>
           </div>
+
 
           <button
             type="button"
@@ -565,6 +622,9 @@ export const NewsIntelligenceWidget: React.FC<NewsIntelligenceWidgetProps> = ({
                   >
                     <div className="news-widget__story-top">
                       <div className="news-widget__badges">
+                        {article.isLive && (
+                          <span className="news-widget__live-indicator-badge">● LIVE RSS</span>
+                        )}
                         <span className={`news-widget__sentiment-badge news-widget__sentiment-badge--${sentiment}`}>
                           {sentiment === 'bullish' && '▲ Bullish / Upside'}
                           {sentiment === 'bearish' && '▼ Bearish / Risk Alert'}
@@ -577,6 +637,7 @@ export const NewsIntelligenceWidget: React.FC<NewsIntelligenceWidgetProps> = ({
                           <span className="news-widget__impact-pill">{article.impactEstimate}</span>
                         )}
                       </div>
+
 
                       <div className="news-widget__meta">
                         <span className="news-widget__source">{article.source}</span>

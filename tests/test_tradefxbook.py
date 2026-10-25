@@ -612,3 +612,32 @@ def test_demo_user_switching_endpoint(api_client):
     me = api_client.get("/api/v1/auth/me", headers={"X-User-Id": "demo_trader_05"})
     assert me.status_code == 200
     assert me.json()["id"] == "demo_trader_05"
+
+
+def test_analytics_breakdown_overall(api_client):
+    """Verify analytics breakdown endpoint supports 'overall' grouping."""
+    resp = api_client.get("/api/v1/analytics/breakdown?group_by=overall", headers={"X-User-Id": "demo_trader_01"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    item = data[0]
+    assert item["key"] == "Overall Performance"
+    assert item["trade_count"] >= 10_000
+    assert item["winning_trades"] > 0
+    assert item["losing_trades"] > 0
+    assert item["win_rate"] is not None
+    assert item["gross_profit"] is not None and item["gross_profit"] > 0
+    assert item["gross_loss"] is not None and item["gross_loss"] > 0
+    assert item["net_pnl"] != 0
+    assert item["profit_factor"] is not None
+
+
+def test_analytics_breakdown_session(api_client):
+    """Verify analytics breakdown endpoint supports 'session' grouping."""
+    resp = api_client.get("/api/v1/analytics/breakdown?group_by=session", headers={"X-User-Id": "demo_trader_01"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) >= 3
+    keys = {d["key"] for d in data}
+    assert "London" in keys
+    assert "New York" in keys

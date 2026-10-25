@@ -430,6 +430,7 @@ def list_trades_paginated(
     Paginated database trade retrieval with parameterized sorting and filtering.
     """
     allowed_sort_fields = {
+        "created_at": "created_at",
         "entry_time": "entry_time",
         "exit_time": "exit_time",
         "net_pnl": "net_pnl",
@@ -440,6 +441,13 @@ def list_trades_paginated(
     }
     sort_col = allowed_sort_fields.get(sort_by, "exit_time")
     sort_dir = "ASC" if sort_order.lower() == "asc" else "DESC"
+
+    if sort_col == "exit_time":
+        order_by_sql = f"ORDER BY COALESCE(exit_time, entry_time) {sort_dir}, created_at DESC"
+    elif sort_col == "created_at":
+        order_by_sql = f"ORDER BY created_at {sort_dir}"
+    else:
+        order_by_sql = f"ORDER BY {sort_col} {sort_dir}, created_at DESC"
 
     page = max(1, page)
     page_size = min(max(1, page_size), 500)
@@ -468,7 +476,7 @@ def list_trades_paginated(
         query_sql = f"""
             SELECT * FROM trades
             {where_sql}
-            ORDER BY {sort_col} {sort_dir}
+            {order_by_sql}
             LIMIT ? OFFSET ?
         """
         page_params = list(params) + [page_size, offset]
@@ -701,22 +709,23 @@ def get_user_closed_trades(
 
 def get_analytics_breakdown(
     user_id: str,
-    group_by_field: str,  # symbol, strategy_or_setup, trading_session, direction, outcome
+    group_by_field: str,  # overall, symbol, strategy_or_setup, trading_session, direction, outcome
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     db_path: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Fast database-level aggregated breakdown grouped by category.
+    Fast database-level aggregated breakdown grouped by category or overall portfolio.
     """
     allowed_groups = {
+        "overall": "overall",
         "symbol": "symbol",
         "strategy": "strategy_or_setup",
         "session": "trading_session",
         "direction": "direction",
         "asset_class": "asset_class",
     }
-    col = allowed_groups.get(group_by_field, "strategy_or_setup")
+    field = allowed_groups.get(group_by_field, "overall")
 
     where_sql, params = _build_trade_filter_sql(
         user_id=user_id,
@@ -725,26 +734,44 @@ def get_analytics_breakdown(
         status="CLOSED",
     )
 
-    query_sql = f"""
-        SELECT
-            {col} as key_col,
-            COUNT(*) as trade_count,
-            SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END) as wins,
-            SUM(CASE WHEN net_pnl < 0 THEN 1 ELSE 0 END) as losses,
-            SUM(CASE WHEN net_pnl = 0 THEN 1 ELSE 0 END) as breakevens,
-            SUM(net_pnl) as total_net_pnl,
-            SUM(CASE WHEN net_pnl > 0 THEN net_pnl ELSE 0 END) as sum_wins,
-            SUM(CASE WHEN net_pnl < 0 THEN net_pnl ELSE 0 END) as sum_losses
-        FROM trades
-        {where_sql}
-        GROUP BY {col}
-        ORDER BY total_net_pnl DESC
-    """
+    if field == "overall":
+        query_sql = f"""
+            SELECT
+                'Overall Performance' as key_col,
+                COUNT(*) as trade_count,
+                SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN net_pnl < 0 THEN 1 ELSE 0 END) as losses,
+                SUM(CASE WHEN net_pnl = 0 THEN 1 ELSE 0 END) as breakevens,
+                SUM(net_pnl) as total_net_pnl,
+                SUM(CASE WHEN net_pnl > 0 THEN net_pnl ELSE 0 END) as sum_wins,
+                SUM(CASE WHEN net_pnl < 0 THEN net_pnl ELSE 0 END) as sum_losses
+            FROM trades
+            {where_sql}
+        """
+    else:
+        col = allowed_groups.get(field, "trading_session")
+        query_sql = f"""
+            SELECT
+                {col} as key_col,
+                COUNT(*) as trade_count,
+                SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN net_pnl < 0 THEN 1 ELSE 0 END) as losses,
+                SUM(CASE WHEN net_pnl = 0 THEN 1 ELSE 0 END) as breakevens,
+                SUM(net_pnl) as total_net_pnl,
+                SUM(CASE WHEN net_pnl > 0 THEN net_pnl ELSE 0 END) as sum_wins,
+                SUM(CASE WHEN net_pnl < 0 THEN net_pnl ELSE 0 END) as sum_losses
+            FROM trades
+            {where_sql}
+            GROUP BY {col}
+            ORDER BY total_net_pnl DESC
+        """
 
     with db_session(db_path) as conn:
         rows = conn.execute(query_sql, params).fetchall()
         results = []
         for r in rows:
+            if not r or (r["trade_count"] or 0) == 0:
+                continue
             k = r["key_col"] or "Unspecified"
             tc = r["trade_count"]
             w = r["wins"] or 0
