@@ -128,19 +128,17 @@ export const HistoricalVsHypotheticalChart: React.FC<HistoricalVsHypotheticalCha
     })
     .join(' ');
 
-  let rebalancedStarted = false;
-  const rebalancedPath = projectionCoords
-    .map((point) => {
-      if (point.yRebalanced === undefined) {
-        rebalancedStarted = false;
-        return '';
-      }
-      const start = rebalancedStarted ? 'L' : 'M';
-      rebalancedStarted = true;
-      return `${start} ${point.x} ${point.yRebalanced}`;
-    })
-    .filter(Boolean)
-    .join(' ');
+  const rebalancedSegments: string[] = [];
+  let isDrawing = false;
+  for (const point of projectionCoords) {
+    if (point.yRebalanced === undefined) {
+      isDrawing = false;
+    } else {
+      rebalancedSegments.push(`${isDrawing ? 'L' : 'M'} ${point.x} ${point.yRebalanced}`);
+      isDrawing = true;
+    }
+  }
+  const rebalancedPath = rebalancedSegments.join(' ');
 
   const dateTicks = [
     ...historicalCoords.map((point) => ({ x: point.x, date: point.date })),
