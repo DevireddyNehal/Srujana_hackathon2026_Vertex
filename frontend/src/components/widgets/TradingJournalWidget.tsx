@@ -109,7 +109,9 @@ export function TradingJournalWidget({
   }, [currentUser, authToken, page, pageSize, searchQuery, directionFilter, statusFilter, sortBy, sortOrder]);
 
   useEffect(() => {
-    loadTrades();
+    void Promise.resolve().then(() => {
+      loadTrades();
+    });
   }, [loadTrades]);
 
   function handleOpenAddModal() {

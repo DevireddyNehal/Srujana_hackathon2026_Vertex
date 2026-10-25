@@ -1077,6 +1077,52 @@ def test_custom_slider_bounds_and_expansion_scenario():
     resp_invalid_fx = client.post("/api/analyze-scenario", json=invalid_fx)
     assert resp_invalid_fx.status_code == 422
 
+    # 5. Zero turnover constraint must yield zero actionable trades and preserve exact capital
+    zero_turnover_payload = copy.deepcopy(contraction_payload)
+    zero_turnover_payload["recommendation_constraints"]["max_turnover_pct"] = 0.0
+    resp_zero_turnover = client.post("/api/analyze-scenario", json=zero_turnover_payload)
+    assert resp_zero_turnover.status_code == 200
+    alt_zero = resp_zero_turnover.json()["ai_analysis"]["alternative_portfolio"]
+    assert alt_zero["constraints_applied"]["turnover_budget_pct"] == 0.0
+    assert alt_zero["actionable_trades"] == []
+    assert sum(a["amount_inr"] for a in alt_zero["proposed_assets"]) == 1000000.0
+    assert round(sum(a["weight_pct"] for a in alt_zero["proposed_assets"]), 1) == 100.0
+
+    # 6. Zero loss tolerance constraint must be honored and not overridden by defaults
+    zero_loss_payload = copy.deepcopy(contraction_payload)
+    zero_loss_payload["recommendation_constraints"]["max_loss_tolerance_pct"] = 0.0
+    resp_zero_loss = client.post("/api/analyze-scenario", json=zero_loss_payload)
+    assert resp_zero_loss.status_code == 200
+    alt_zero_loss = resp_zero_loss.json()["ai_analysis"]["alternative_portfolio"]
+    assert alt_zero_loss["constraints_applied"]["max_loss_tolerance_pct"] == 0.0
+
+    # 7. Portfolio with pre-existing safe haven assets must maintain unique tickers
+    existing_safe_payload = copy.deepcopy(contraction_payload)
+    existing_safe_payload["assets"] = [
+        {"ticker": "TCS.NS", "name": "TCS", "sector": "IT", "asset_class": "Equity", "amount_inr": 700000.0, "liquidity_tag": "High", "currency_exposure": "INR"},
+        {"ticker": "GOLDBEES.NS", "name": "Gold ETF", "sector": "Gold", "asset_class": "Commodity", "amount_inr": 300000.0, "liquidity_tag": "High", "currency_exposure": "INR"},
+    ]
+    resp_existing_safe = client.post("/api/analyze-scenario", json=existing_safe_payload)
+    assert resp_existing_safe.status_code == 200
+    alt_existing_safe = resp_existing_safe.json()["ai_analysis"]["alternative_portfolio"]
+    tickers = [a["ticker"] for a in alt_existing_safe["proposed_assets"]]
+    assert len(tickers) == len(set(tickers)), f"Duplicate tickers found: {tickers}"
+    assert sum(a["amount_inr"] for a in alt_existing_safe["proposed_assets"]) == 1000000.0
+    assert round(sum(a["weight_pct"] for a in alt_existing_safe["proposed_assets"]), 1) == 100.0
+
+    # 8. Small portfolio asset values (trim amounts under 1000 INR) must conserve capital
+    small_payload = copy.deepcopy(contraction_payload)
+    small_payload["assets"] = [
+        {"ticker": "TCS.NS", "name": "TCS", "sector": "IT", "asset_class": "Equity", "amount_inr": 8000.0, "liquidity_tag": "High", "currency_exposure": "INR"},
+        {"ticker": "INFY.NS", "name": "Infosys", "sector": "IT", "asset_class": "Equity", "amount_inr": 2000.0, "liquidity_tag": "High", "currency_exposure": "INR"},
+    ]
+    resp_small = client.post("/api/analyze-scenario", json=small_payload)
+    assert resp_small.status_code == 200
+    alt_small = resp_small.json()["ai_analysis"]["alternative_portfolio"]
+    assert sum(a["amount_inr"] for a in alt_small["proposed_assets"]) == 10000.0
+    assert round(sum(a["weight_pct"] for a in alt_small["proposed_assets"]), 1) == 100.0
+
+
 
 
 

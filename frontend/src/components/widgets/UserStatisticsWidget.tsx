@@ -63,7 +63,9 @@ export function UserStatisticsWidget({
   }, [currentUser, authToken, rangePreset, sessionFilter, breakdownDim]);
 
   useEffect(() => {
-    loadStats();
+    void Promise.resolve().then(() => {
+      loadStats();
+    });
   }, [loadStats]);
 
   // Equity Curve SVG calculation

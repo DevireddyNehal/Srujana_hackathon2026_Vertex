@@ -419,13 +419,16 @@ def generate_alternative_rebalance(
     # 1. Resolve constraints with intelligent investor-profile fallbacks
     risk_tol = str(investor_profile.get("risk_tolerance", "Moderate")).capitalize()
     default_max_loss = 8.0 if risk_tol == "Low" else (12.0 if risk_tol == "Moderate" else 18.0)
-    max_loss_tolerance = float(recommendation_constraints.get("max_loss_tolerance_pct") or default_max_loss)
+    val_loss = recommendation_constraints.get("max_loss_tolerance_pct")
+    max_loss_tolerance = float(val_loss) if val_loss is not None else default_max_loss
 
     liq_need = str(investor_profile.get("liquidity_need", "Medium")).capitalize()
     default_min_liq = 25.0 if liq_need == "High" else (15.0 if liq_need == "Medium" else 5.0)
-    min_liquidity = float(recommendation_constraints.get("min_liquidity_pct") or default_min_liq)
+    val_liq = recommendation_constraints.get("min_liquidity_pct")
+    min_liquidity = float(val_liq) if val_liq is not None else default_min_liq
 
-    max_turnover = float(recommendation_constraints.get("max_turnover_pct") or 25.0)
+    val_turnover = recommendation_constraints.get("max_turnover_pct")
+    max_turnover = float(val_turnover) if val_turnover is not None else 25.0
     hedge_pref = str(recommendation_constraints.get("hedge_preference") or "multi_asset").lower()
 
     mkt_shock = float(scenario.get("market_decline_pct", -15.0) or 0.0)
@@ -461,17 +464,29 @@ def generate_alternative_rebalance(
 
     # Handle bull-market expansion scenario (positive or non-negative return)
     if current_loss_inr >= 0:
+        prop_list = [
+            {
+                "ticker": a.get("ticker", "UNKNOWN"),
+                "sector": a.get("sector", "Other"),
+                "weight_pct": round((float(a.get("amount_inr", 0)) / total_val) * 100.0, 1),
+                "amount_inr": int(round(float(a.get("amount_inr", 0)))),
+            }
+            for a in assets
+            if float(a.get("amount_inr", 0)) > 0
+        ]
+        target_int_val = int(round(total_val))
+        diff_inr = target_int_val - sum(a["amount_inr"] for a in prop_list)
+        if diff_inr != 0 and prop_list:
+            largest = max(prop_list, key=lambda x: x["amount_inr"])
+            largest["amount_inr"] += diff_inr
+        weight_diff = round(100.0 - sum(a["weight_pct"] for a in prop_list), 1)
+        if weight_diff != 0.0 and prop_list:
+            largest = max(prop_list, key=lambda x: x["amount_inr"])
+            largest["weight_pct"] = round(largest["weight_pct"] + weight_diff, 1)
+
         return {
             "name": "AI Risk-Adjusted Hedge Allocation",
-            "proposed_assets": [
-                {
-                    "ticker": a.get("ticker", "UNKNOWN"),
-                    "sector": a.get("sector", "Other"),
-                    "weight_pct": round((float(a.get("amount_inr", 0)) / total_val) * 100.0, 1),
-                    "amount_inr": int(round(float(a.get("amount_inr", 0)))),
-                }
-                for a in assets
-            ],
+            "proposed_assets": prop_list,
             "stressed_value_median_inr": int(round(current_stressed_val)),
             "drawdown_saved_inr": 0,
             "tradeoff_explanation": (
@@ -498,14 +513,18 @@ def generate_alternative_rebalance(
     target_loss_inr = total_val * (max_loss_tolerance / 100.0)
     excess_loss_inr = max(0.0, loss_inr - target_loss_inr)
 
-    if excess_loss_inr > 0:
-        needed_turnover = excess_loss_inr / 0.22
+    if max_turnover <= 0.0:
+        needed_turnover = 0.0
+        turnover_inr = 0.0
     else:
-        # Already within loss tolerance; perform mild risk-parity alignment only if drags exist
-        needed_turnover = total_val * 0.10 if drags else 0.0
+        if excess_loss_inr > 0:
+            needed_turnover = excess_loss_inr / 0.22
+        else:
+            # Already within loss tolerance; perform mild risk-parity alignment only if drags exist
+            needed_turnover = total_val * 0.10 if drags else 0.0
 
-    max_turnover_inr = total_val * (max_turnover / 100.0)
-    turnover_inr = min(max_turnover_inr, max(total_val * 0.05 if drags else 0.0, needed_turnover))
+        max_turnover_inr = total_val * (max_turnover / 100.0)
+        turnover_inr = min(max_turnover_inr, max(total_val * 0.05 if drags else 0.0, needed_turnover))
 
     # 4. Generate actionable trim trades
     actionable_trades = []
@@ -517,7 +536,7 @@ def generate_alternative_rebalance(
             break
         trim_capacity = d["amount_inr"] * 0.50
         trim_amt = min(remaining_to_trim, trim_capacity)
-        if trim_amt > 1000:
+        if trim_amt >= 1.0:
             remaining_to_trim -= trim_amt
             trimmed_holdings[d["ticker"]] = trim_amt
             actionable_trades.append({
@@ -547,12 +566,12 @@ def generate_alternative_rebalance(
         elif hedge_pref == "equity_defensive":
             gold_alloc_inr = actual_rebalanced_inr * 0.30
             liquid_alloc_inr = actual_rebalanced_inr * 0.70
-        else: # "multi_asset"
+        else:  # "multi_asset"
             liq_ratio = max(0.30, min(0.70, (min_liquidity / 100.0) if min_liquidity else 0.50))
             liquid_alloc_inr = actual_rebalanced_inr * liq_ratio
             gold_alloc_inr = actual_rebalanced_inr - liquid_alloc_inr
 
-    if liquid_alloc_inr > 0:
+    if liquid_alloc_inr >= 1.0:
         actionable_trades.append({
             "ticker": "LIQUIDBEES.NS",
             "name": "Nippon India Liquid ETF (TREPS / Cash Debt)",
@@ -562,7 +581,7 @@ def generate_alternative_rebalance(
             "reason": f"Satisfies minimum {min_liquidity}% liquidity floor with zero MTM capital risk.",
         })
 
-    if gold_alloc_inr > 0:
+    if gold_alloc_inr >= 1.0:
         actionable_trades.append({
             "ticker": "GOLDBEES.NS",
             "name": "Nippon India Gold ETF",
@@ -573,43 +592,68 @@ def generate_alternative_rebalance(
         })
 
     # 6. Build proposed asset list
-    proposed_assets = []
+    proposed_map: Dict[str, Dict[str, Any]] = {}
     for a in assets:
         amt = float(a.get("amount_inr", 0))
         t = a.get("ticker", "UNKNOWN")
         new_amt = amt - trimmed_holdings.get(t, 0.0)
-        if new_amt > 1000:
-            proposed_assets.append({
+        if new_amt > 0:
+            proposed_map[t] = {
                 "ticker": t,
                 "sector": a.get("sector", "Other"),
-                "weight_pct": round((new_amt / total_val) * 100.0, 1),
-                "amount_inr": int(round(new_amt)),
-            })
+                "amount_inr": new_amt,
+            }
 
-    if gold_alloc_inr > 1000:
-        proposed_assets.append({
-            "ticker": "GOLDBEES.NS",
-            "sector": "Gold",
-            "weight_pct": round((gold_alloc_inr / total_val) * 100.0, 1),
-            "amount_inr": int(round(gold_alloc_inr)),
-        })
+    if gold_alloc_inr > 0:
+        if "GOLDBEES.NS" in proposed_map:
+            proposed_map["GOLDBEES.NS"]["amount_inr"] += gold_alloc_inr
+        else:
+            proposed_map["GOLDBEES.NS"] = {
+                "ticker": "GOLDBEES.NS",
+                "sector": "Gold",
+                "amount_inr": gold_alloc_inr,
+            }
 
-    if liquid_alloc_inr > 1000:
-        proposed_assets.append({
-            "ticker": "LIQUIDBEES.NS",
-            "sector": "Liquid Debt",
-            "weight_pct": round((liquid_alloc_inr / total_val) * 100.0, 1),
-            "amount_inr": int(round(liquid_alloc_inr)),
-        })
+    if liquid_alloc_inr > 0:
+        if "LIQUIDBEES.NS" in proposed_map:
+            proposed_map["LIQUIDBEES.NS"]["amount_inr"] += liquid_alloc_inr
+        else:
+            proposed_map["LIQUIDBEES.NS"] = {
+                "ticker": "LIQUIDBEES.NS",
+                "sector": "Liquid Debt",
+                "amount_inr": liquid_alloc_inr,
+            }
 
-    # Fallback to CONTRACT.md baseline if proposed_assets is empty
-    if not proposed_assets:
+    # Fallback to CONTRACT.md baseline if proposed_map is empty
+    if not proposed_map:
         proposed_assets = [
             {"ticker": "TCS.NS", "sector": "IT", "weight_pct": 25.0, "amount_inr": int(round(total_val * 0.25))},
             {"ticker": "HDFCBANK.NS", "sector": "Banking", "weight_pct": 25.0, "amount_inr": int(round(total_val * 0.25))},
             {"ticker": "GOLDBEES.NS", "sector": "Gold", "weight_pct": 20.0, "amount_inr": int(round(total_val * 0.20))},
             {"ticker": "LIQUIDBEES.NS", "sector": "Liquid Debt", "weight_pct": 30.0, "amount_inr": int(round(total_val * 0.30))},
         ]
+    else:
+        raw_sum = sum(item["amount_inr"] for item in proposed_map.values())
+        proposed_assets = []
+        for item in proposed_map.values():
+            norm_amt = (item["amount_inr"] / raw_sum) * total_val if raw_sum > 0 else item["amount_inr"]
+            proposed_assets.append({
+                "ticker": item["ticker"],
+                "sector": item["sector"],
+                "weight_pct": round((norm_amt / total_val) * 100.0, 1),
+                "amount_inr": int(round(norm_amt)),
+            })
+
+        target_int_val = int(round(total_val))
+        diff_inr = target_int_val - sum(a["amount_inr"] for a in proposed_assets)
+        if diff_inr != 0 and proposed_assets:
+            largest = max(proposed_assets, key=lambda x: x["amount_inr"])
+            largest["amount_inr"] += diff_inr
+
+        weight_diff = round(100.0 - sum(a["weight_pct"] for a in proposed_assets), 1)
+        if weight_diff != 0.0 and proposed_assets:
+            largest = max(proposed_assets, key=lambda x: x["amount_inr"])
+            largest["weight_pct"] = round(largest["weight_pct"] + weight_diff, 1)
 
     # 7. Stress the proposed asset allocation under the same scenario
     alt_stressed_val = 0.0

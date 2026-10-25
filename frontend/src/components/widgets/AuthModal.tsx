@@ -45,9 +45,11 @@ export function AuthModal({ isOpen, onClose, currentUser, onUserChanged }: AuthM
 
   useEffect(() => {
     if (isOpen) {
-      loadDemoUsers();
-      setErrorMsg(null);
-      setSuccessMsg(null);
+      void Promise.resolve().then(() => {
+        loadDemoUsers();
+        setErrorMsg(null);
+        setSuccessMsg(null);
+      });
     }
   }, [isOpen, loadDemoUsers]);
 
