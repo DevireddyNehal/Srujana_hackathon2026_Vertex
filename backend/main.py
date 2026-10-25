@@ -580,6 +580,27 @@ def simulate_contagion(request: ContagionSimulationRequest) -> dict[str, Any]:
             portfolio=portfolio_data,
             custom_magnitude_pct=request.custom_magnitude_pct,
         )
+
+        # Mirror false diversification metrics at root level for frontend UI convenience
+        fda = {}
+        for stage in result.get("stages", []):
+            if "false_diversification_analysis" in stage:
+                fda = stage["false_diversification_analysis"]
+                break
+
+        result["is_false_diversification_detected"] = fda.get("is_false_diversification_detected", False)
+        result["nominal_diversification_score"] = fda.get("nominal_diversification_score")
+        result["effective_tail_diversification_score"] = fda.get("effective_tail_diversification_score")
+        result["diversification_haircut_points"] = fda.get("diversification_haircut_points")
+        if fda.get("traps"):
+            result["upstream_dependency"] = (
+                fda["traps"][0].get("upstream_bottleneck")
+                or fda["traps"][0].get("common_vulnerability")
+                or "Crude oil & petrochemical derivatives"
+            )
+        else:
+            result["upstream_dependency"] = "Crude oil & petrochemical derivatives"
+
         return result
     except Exception as exc:
         logger.exception("Butterfly contagion simulation failed")

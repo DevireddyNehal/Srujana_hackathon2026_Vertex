@@ -44,6 +44,7 @@ from engine.contagion import (
     get_available_contagion_scenarios,
     simulate_butterfly_shock,
     detect_false_diversification_trap,
+    _compute_contagion_inoculation,
 )
 
 
@@ -759,5 +760,52 @@ def test_api_reverse_stress_test_top_level_assets_and_empty():
     s3_holdings = resp_contagion.json()["stages"][3]["affected_holdings"]
     assert len(s3_holdings) == 1
     assert s3_holdings[0]["ticker"] == "INDIGO.NS"
+
+
+def test_contagion_inoculation_resilient_and_top_level_fda():
+    # 1. Resilient portfolio (current_loss_inr >= 0)
+    resilient_alloc = _compute_contagion_inoculation(
+        assets=[],
+        affected_holdings=[],
+        total_portfolio_value=1_000_000,
+        current_loss_inr=5000,
+        shock_id="oil_supply_disruption",
+    )
+    assert resilient_alloc["is_hedging_needed"] is False
+    assert resilient_alloc["hedge_instrument"] == "None (Portfolio Resilient)"
+    assert resilient_alloc["reallocation_amount_inr"] == 0
+    assert resilient_alloc["original_drawdown_inr"] == 0
+    assert resilient_alloc["post_hedge_drawdown_inr"] == 0
+    assert resilient_alloc["drawdown_saved_inr"] == 0
+    assert resilient_alloc["post_hedge_impact_pct"] == 0.5
+    assert "positive resilience" in resilient_alloc["opportunity_cost"]
+    assert "positive resilience" in resilient_alloc["message"]
+    assert resilient_alloc["proposed_rebalance"] == []
+
+    # Edge case: zero portfolio value
+    zero_val_alloc = _compute_contagion_inoculation(
+        assets=[],
+        affected_holdings=[],
+        total_portfolio_value=0,
+        current_loss_inr=0,
+        shock_id="oil_supply_disruption",
+    )
+    assert zero_val_alloc["post_hedge_impact_pct"] == 0.0
+
+    # 2. Top-level FDA mirroring in contagion API
+    pytest.importorskip("main")
+    from fastapi.testclient import TestClient
+    from main import app
+    client = TestClient(app)
+    resp = client.post("/api/contagion/simulate", json={"scenario_id": "oil_supply_disruption"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "is_false_diversification_detected" in data
+    assert "nominal_diversification_score" in data
+    assert "effective_tail_diversification_score" in data
+    assert "diversification_haircut_points" in data
+    assert "upstream_dependency" in data
+    assert data["upstream_dependency"] is not None
+
 
 

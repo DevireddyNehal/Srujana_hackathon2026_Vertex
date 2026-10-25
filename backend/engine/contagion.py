@@ -417,10 +417,17 @@ def _compute_contagion_inoculation(
     against this specific macro contagion pathway.
     """
     if current_loss_inr >= 0:
+        current_return_pct = round((current_loss_inr / total_portfolio_value * 100.0), 2) if total_portfolio_value > 0 else 0.0
         return {
             "is_hedging_needed": False,
-            "message": "Portfolio displays positive resilience under this scenario; no defensive reallocation required.",
+            "hedge_instrument": "None (Portfolio Resilient)",
+            "reallocation_amount_inr": 0,
+            "original_drawdown_inr": 0,
+            "post_hedge_drawdown_inr": 0,
             "drawdown_saved_inr": 0,
+            "post_hedge_impact_pct": current_return_pct,
+            "opportunity_cost": "Portfolio demonstrates positive resilience under this scenario; maintaining existing allocations avoids unnecessary cash drag.",
+            "message": "Portfolio displays positive resilience under this scenario; no defensive reallocation required.",
             "proposed_rebalance": [],
         }
 
