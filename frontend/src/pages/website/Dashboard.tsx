@@ -296,7 +296,9 @@ function Header({
   onToggleDarkMode,
   onReset,
   currentUser,
-  onOpenAuthModal,
+  onOpenDemoSwitcher,
+  onOpenLogin,
+  onOpenRegister,
 }: {
   activePage: PageName;
   onNavigate: (page: PageName) => void;
@@ -308,9 +310,18 @@ function Header({
   onToggleDarkMode: () => void;
   onReset: () => void;
   currentUser: UserProfile | null;
-  onOpenAuthModal: () => void;
+  onOpenDemoSwitcher: () => void;
+  onOpenLogin: () => void;
+  onOpenRegister: () => void;
 }) {
   const activeIndex = pages.findIndex((page) => page.id === activePage);
+  const settingsRef = useRef<HTMLDetailsElement>(null);
+
+  const closeSettings = () => {
+    if (settingsRef.current) {
+      settingsRef.current.open = false;
+    }
+  };
 
   return (
     <header className="app-header">
@@ -350,23 +361,14 @@ function Header({
         <button
           type="button"
           className="header-user-btn"
-          onClick={onOpenAuthModal}
-          title="Switch Trader / Login"
+          onClick={onOpenDemoSwitcher}
+          title="Switch Demo Trader Persona"
         >
-          <span aria-hidden="true">👤</span>
+          <span aria-hidden="true">👥</span>
           <span className="header-user-name">{currentUser?.name || "Demo Trader 01"}</span>
           <span className="header-user-status-dot" aria-hidden="true" />
         </button>
-        <label className="header-select currency-select">
-          <span className="sr-only">Reporting currency</span>
-          <select
-            value={currency}
-            onChange={(event) => onCurrencyChange(event.target.value as Currency)}
-          >
-            <option value="INR">INR ₹</option>
-            <option value="USD">USD $</option>
-          </select>
-        </label>
+
         <label className="header-select period-select">
           <span className="sr-only">Historical analysis period</span>
           <select
@@ -377,36 +379,99 @@ function Header({
             <option value={24}>24 months</option>
           </select>
         </label>
-        <button type="button" className="reset-view" onClick={onReset} title="Reset dashboard to portfolio defaults">Reset view</button>
 
-        <button
-          type="button"
-          className="theme-toggle-btn"
-          onClick={onToggleDarkMode}
-          aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`}
-          title={`Switch to ${darkMode ? "light" : "dark"} mode`}
-        >
-          <span aria-hidden="true">{darkMode ? "☀" : "☾"}</span>
-        </button>
-        <details className="settings-menu">
+        <details className="settings-menu" ref={settingsRef}>
           <summary aria-label="Settings" title="Settings">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 8.25a3.75 3.75 0 1 0 0 7.5 3.75 3.75 0 0 0 0-7.5Z" />
               <path d="m19.4 15 .05.04a1.7 1.7 0 0 1-2.4 2.4l-.04-.05a1.7 1.7 0 0 0-2.9 1.2v.16a1.7 1.7 0 0 1-3.4 0v-.07a1.7 1.7 0 0 0-2.9-1.2l-.05.05a1.7 1.7 0 0 1-2.4-2.4l.05-.04a1.7 1.7 0 0 0-1.2-2.9h-.16a1.7 1.7 0 0 1 0-3.4h.07a1.7 1.7 0 0 0 1.2-2.9l-.05-.05a1.7 1.7 0 0 1 2.4-2.4l.04.05a1.7 1.7 0 0 0 2.9-1.2v-.16a1.7 1.7 0 0 1 3.4 0v.07a1.7 1.7 0 0 0 2.9 1.2l.05-.05a1.7 1.7 0 0 1 2.4 2.4l-.05.04a1.7 1.7 0 0 0 1.2 2.9h.16a1.7 1.7 0 0 1 0 3.4h-.07a1.7 1.7 0 0 0-1.2 2.9Z" />
             </svg>
           </summary>
-          <div className="settings-popover" aria-label="Appearance settings">
-            <span>Appearance</span>
-            <button
-              type="button"
-              className="theme-toggle"
-              onClick={onToggleDarkMode}
-              aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`}
-              aria-pressed={darkMode}
-            >
-              <span aria-hidden="true">{darkMode ? "☀" : "☾"}</span>
-              <span>{darkMode ? "Light mode" : "Dark mode"}</span>
-            </button>
+          <div className="settings-popover" aria-label="Settings menu">
+            <div className="settings-group">
+              <span className="settings-group-label">Account &amp; Auth</span>
+              <button
+                type="button"
+                className="settings-action-btn"
+                onClick={() => {
+                  closeSettings();
+                  onOpenLogin();
+                }}
+              >
+                <span>🔑</span>
+                <span>Account Login</span>
+              </button>
+              <button
+                type="button"
+                className="settings-action-btn"
+                onClick={() => {
+                  closeSettings();
+                  onOpenRegister();
+                }}
+              >
+                <span>✨</span>
+                <span>Register New User</span>
+              </button>
+            </div>
+
+            <div className="settings-divider" />
+
+            <div className="settings-group">
+              <span className="settings-group-label">Currency &amp; Preferences</span>
+              <div className="settings-currency-row">
+                <span className="settings-currency-label">Display Currency</span>
+                <div className="settings-currency-toggle">
+                  <button
+                    type="button"
+                    className={`settings-currency-btn ${currency === "INR" ? "active" : ""}`}
+                    onClick={() => onCurrencyChange("INR")}
+                  >
+                    INR (₹)
+                  </button>
+                  <button
+                    type="button"
+                    className={`settings-currency-btn ${currency === "USD" ? "active" : ""}`}
+                    onClick={() => onCurrencyChange("USD")}
+                  >
+                    USD ($)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="settings-divider" />
+
+            <div className="settings-group">
+              <span className="settings-group-label">Appearance</span>
+              <button
+                type="button"
+                className="theme-toggle"
+                onClick={onToggleDarkMode}
+                aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`}
+                aria-pressed={darkMode}
+              >
+                <span aria-hidden="true">{darkMode ? "☀" : "☾"}</span>
+                <span>{darkMode ? "Light mode" : "Dark mode"}</span>
+              </button>
+            </div>
+
+            <div className="settings-divider" />
+
+            <div className="settings-group">
+              <span className="settings-group-label">Actions</span>
+              <button
+                type="button"
+                className="settings-action-btn settings-reset-btn"
+                onClick={() => {
+                  closeSettings();
+                  onReset();
+                }}
+                title="Reset dashboard to portfolio defaults"
+              >
+                <span>↺</span>
+                <span>Reset View</span>
+              </button>
+            </div>
           </div>
         </details>
       </div>
@@ -2657,7 +2722,6 @@ export default function Dashboard() {
     }
     return "demo_token_demo_trader_01";
   });
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   useEffect(() => {
     getDemoUsers()
@@ -2669,6 +2733,28 @@ export default function Dashboard() {
         }
       })
       .catch((e) => console.error("Initial demo users fetch:", e));
+  }, []);
+
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState<"demo" | "login" | "register">("demo");
+  const [authModalHideTabs, setAuthModalHideTabs] = useState<Array<"demo" | "login" | "register">>([]);
+
+  const openDemoSwitcher = useCallback(() => {
+    setAuthModalTab("demo");
+    setAuthModalHideTabs(["login", "register"]);
+    setIsAuthModalOpen(true);
+  }, []);
+
+  const openLogin = useCallback(() => {
+    setAuthModalTab("login");
+    setAuthModalHideTabs(["demo"]);
+    setIsAuthModalOpen(true);
+  }, []);
+
+  const openRegister = useCallback(() => {
+    setAuthModalTab("register");
+    setAuthModalHideTabs(["demo"]);
+    setIsAuthModalOpen(true);
   }, []);
 
   const handleUserChanged = (user: UserProfile, token: string) => {
@@ -2919,7 +3005,9 @@ export default function Dashboard() {
         onToggleDarkMode={() => setDarkMode((enabled) => !enabled)}
         onReset={resetView}
         currentUser={currentUser}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenDemoSwitcher={openDemoSwitcher}
+        onOpenLogin={openLogin}
+        onOpenRegister={openRegister}
       />
 
       <div className="workspace">
@@ -2977,25 +3065,76 @@ export default function Dashboard() {
                 hedgePreference={hedgePreference}
                 onNavigateToStressLab={handleRunFullAnalysis}
               />
-              <DiagnosticsPanel
-                key={`${portfolioId}-${diagnosticsFormVersion}`}
-                portfolio={portfolio}
-                weights={weights}
-                riskTolerance={riskTolerance}
-                onRiskToleranceChange={setRiskTolerance}
-                horizon={horizon}
-                onHorizonChange={setHorizon}
-                liquidityNeed={liquidityNeed}
-                onLiquidityNeedChange={setLiquidityNeed}
-                lossLimit={lossLimit}
-                onLossLimitChange={setLossLimit}
-                maxTurnoverPct={maxTurnoverPct}
-                onMaxTurnoverPctChange={setMaxTurnoverPct}
-                hedgePreference={hedgePreference}
-                onHedgePreferenceChange={setHedgePreference}
-                scenarioResult={scenarioResult}
-                currency={currency}
-              />
+              <div className="overview-right-column">
+                <DiagnosticsPanel
+                  key={`${portfolioId}-${diagnosticsFormVersion}`}
+                  portfolio={portfolio}
+                  weights={weights}
+                  riskTolerance={riskTolerance}
+                  onRiskToleranceChange={setRiskTolerance}
+                  horizon={horizon}
+                  onHorizonChange={setHorizon}
+                  liquidityNeed={liquidityNeed}
+                  onLiquidityNeedChange={setLiquidityNeed}
+                  lossLimit={lossLimit}
+                  onLossLimitChange={setLossLimit}
+                  maxTurnoverPct={maxTurnoverPct}
+                  onMaxTurnoverPctChange={setMaxTurnoverPct}
+                  hedgePreference={hedgePreference}
+                  onHedgePreferenceChange={setHedgePreference}
+                  scenarioResult={scenarioResult}
+                  currency={currency}
+                />
+                <div className="overview-allocation-teaser">
+                  <div>
+                    <span className="eyebrow">Portfolio composition</span>
+                    <strong>Review the holdings and concentration behind this risk profile.</strong>
+                  </div>
+                  <a
+                    href="?page=allocation"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigateTo("allocation");
+                    }}
+                  >
+                    Explore allocation <span>→</span>
+                  </a>
+                </div>
+                {activeScenario && scenarioResult && (
+                  <div className="overview-compare-teaser">
+                    <span><strong>{activeScenario.label}</strong> models an impact of {signedMoney(scenarioResult.pnl, currency)}.</span>
+                    <a
+                      href="?page=stresslab"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        navigateTo("stresslab");
+                      }}
+                    >
+                      Open Stress Lab <span>→</span>
+                    </a>
+                  </div>
+                )}
+                <div className="page-endcap overview-endcap">
+                  <div className="endcap-copy">
+                    <span className="eyebrow">{pageMeta.title} · LEARNING NOTE</span>
+                    <strong>{pageGuidance[activePage].title}</strong>
+                  </div>
+                  <ul className="endcap-tips">
+                    {pageGuidance[activePage].tips.map((tip, index) => (
+                      <li key={tip}><span>0{index + 1}</span>{tip}</li>
+                    ))}
+                  </ul>
+                  <div className="endcap-orbit" aria-hidden="true">
+                    <svg viewBox="0 0 132 58" focusable="false">
+                      <path d="M4 42c18-1 20-28 40-28s20 30 40 30 22-23 44-23" />
+                      <circle cx="44" cy="14" r="4" />
+                      <circle cx="84" cy="44" r="4" />
+                      <circle cx="128" cy="21" r="4" />
+                    </svg>
+                    <span>RISK / IN CONTEXT</span>
+                  </div>
+                </div>
+              </div>
               <RiskSummaryEngine
                 payload={riskSummaryRequest}
                 currency={currency}
@@ -3156,64 +3295,38 @@ export default function Dashboard() {
             <TradingJournalWidget
               currentUser={currentUser}
               authToken={authToken}
-              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+              onOpenAuthModal={openDemoSwitcher}
             />
           )}
           {activePage === "userstats" && (
             <UserStatisticsWidget
               currentUser={currentUser}
               authToken={authToken}
-              onOpenAuthModal={() => setIsAuthModalOpen(true)}
+              onOpenAuthModal={openDemoSwitcher}
             />
           )}
-          {activePage === "overview" && (
-            <div className="overview-allocation-teaser">
-              <div><span className="eyebrow">Portfolio composition</span><strong>Review the holdings and concentration behind this risk profile.</strong></div>
-              <a
-                href="?page=allocation"
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigateTo("allocation");
-                }}
-              >
-                Explore allocation <span>→</span>
-              </a>
+          {activePage !== "overview" && (
+            <div className="page-endcap">
+              <div className="endcap-copy">
+                <span className="eyebrow">{pageMeta.title} · LEARNING NOTE</span>
+                <strong>{pageGuidance[activePage].title}</strong>
+              </div>
+              <ul className="endcap-tips">
+                {pageGuidance[activePage].tips.map((tip, index) => (
+                  <li key={tip}><span>0{index + 1}</span>{tip}</li>
+                ))}
+              </ul>
+              <div className="endcap-orbit" aria-hidden="true">
+                <svg viewBox="0 0 132 58" focusable="false">
+                  <path d="M4 42c18-1 20-28 40-28s20 30 40 30 22-23 44-23" />
+                  <circle cx="44" cy="14" r="4" />
+                  <circle cx="84" cy="44" r="4" />
+                  <circle cx="128" cy="21" r="4" />
+                </svg>
+                <span>RISK / IN CONTEXT</span>
+              </div>
             </div>
           )}
-          {activePage === "overview" && activeScenario && scenarioResult && (
-            <div className="overview-compare-teaser">
-              <span><strong>{activeScenario.label}</strong> models an impact of {signedMoney(scenarioResult.pnl, currency)}.</span>
-              <a
-                href="?page=stresslab"
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigateTo("stresslab");
-                }}
-              >
-                Open Stress Lab <span>→</span>
-              </a>
-            </div>
-          )}
-          <div className="page-endcap">
-            <div className="endcap-copy">
-              <span className="eyebrow">{pageMeta.title} · LEARNING NOTE</span>
-              <strong>{pageGuidance[activePage].title}</strong>
-            </div>
-            <ul className="endcap-tips">
-              {pageGuidance[activePage].tips.map((tip, index) => (
-                <li key={tip}><span>0{index + 1}</span>{tip}</li>
-              ))}
-            </ul>
-            <div className="endcap-orbit" aria-hidden="true">
-              <svg viewBox="0 0 132 58" focusable="false">
-                <path d="M4 42c18-1 20-28 40-28s20 30 40 30 22-23 44-23" />
-                <circle cx="44" cy="14" r="4" />
-                <circle cx="84" cy="44" r="4" />
-                <circle cx="128" cy="21" r="4" />
-              </svg>
-              <span>RISK / IN CONTEXT</span>
-            </div>
-          </div>
         </div>
         <footer className="app-footer">
           <span><span className="footer-mark">V</span> VERTEX <span>PORTFOLIO RISK LAB</span></span>
@@ -3238,6 +3351,8 @@ export default function Dashboard() {
         onClose={() => setIsAuthModalOpen(false)}
         currentUser={currentUser}
         onUserChanged={handleUserChanged}
+        initialTab={authModalTab}
+        hideTabs={authModalHideTabs}
       />
     </main>
   );

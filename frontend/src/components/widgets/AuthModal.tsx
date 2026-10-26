@@ -10,10 +10,19 @@ interface AuthModalProps {
   onClose: () => void;
   currentUser: UserProfile | null;
   onUserChanged: (user: UserProfile, token: string) => void;
+  initialTab?: "demo" | "login" | "register";
+  hideTabs?: Array<"demo" | "login" | "register">;
 }
 
-export function AuthModal({ isOpen, onClose, currentUser, onUserChanged }: AuthModalProps) {
-  const [activeTab, setActiveTab] = useState<"demo" | "login" | "register">("demo");
+export function AuthModal({
+  isOpen,
+  onClose,
+  currentUser,
+  onUserChanged,
+  initialTab = "demo",
+  hideTabs = [],
+}: AuthModalProps) {
+  const [activeTab, setActiveTab] = useState<"demo" | "login" | "register">(initialTab);
   const [demoUsers, setDemoUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -45,13 +54,14 @@ export function AuthModal({ isOpen, onClose, currentUser, onUserChanged }: AuthM
 
   useEffect(() => {
     if (isOpen) {
+      setActiveTab(initialTab);
       void Promise.resolve().then(() => {
         loadDemoUsers();
         setErrorMsg(null);
         setSuccessMsg(null);
       });
     }
-  }, [isOpen, loadDemoUsers]);
+  }, [isOpen, initialTab, loadDemoUsers]);
 
   async function handleSwitchDemo(userId: string) {
     try {
@@ -136,11 +146,17 @@ export function AuthModal({ isOpen, onClose, currentUser, onUserChanged }: AuthM
       <div className="auth-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="auth-modal-header">
           <div className="auth-title-wrap">
-            <span className="auth-icon">🔐</span>
+            <span className="auth-icon">{hideTabs.includes("demo") ? "👤" : "👥"}</span>
             <div>
-              <h3>Trader Authentication & Multi-User Switcher</h3>
+              <h3>
+                {hideTabs.includes("demo")
+                  ? activeTab === "register" ? "Register New Account" : "Account Login"
+                  : "Demo Trader Switcher"}
+              </h3>
               <p className="auth-subtitle">
-                Isolated trade data, journal, and stats per user account
+                {hideTabs.includes("demo")
+                  ? "Sign in or register an account with isolated portfolio data"
+                  : "Switch instantaneously between 10 seeded trading personas"}
               </p>
             </div>
           </div>
@@ -161,24 +177,30 @@ export function AuthModal({ isOpen, onClose, currentUser, onUserChanged }: AuthM
         {successMsg && <div className="auth-alert success-alert">{successMsg}</div>}
 
         <div className="auth-tabs">
-          <button
-            className={`auth-tab-btn ${activeTab === "demo" ? "active" : ""}`}
-            onClick={() => setActiveTab("demo")}
-          >
-            👥 10 Demo Traders
-          </button>
-          <button
-            className={`auth-tab-btn ${activeTab === "login" ? "active" : ""}`}
-            onClick={() => setActiveTab("login")}
-          >
-            🔑 Account Login
-          </button>
-          <button
-            className={`auth-tab-btn ${activeTab === "register" ? "active" : ""}`}
-            onClick={() => setActiveTab("register")}
-          >
-            ✨ Register New User
-          </button>
+          {!hideTabs.includes("demo") && (
+            <button
+              className={`auth-tab-btn ${activeTab === "demo" ? "active" : ""}`}
+              onClick={() => setActiveTab("demo")}
+            >
+              👥 10 Demo Traders
+            </button>
+          )}
+          {!hideTabs.includes("login") && (
+            <button
+              className={`auth-tab-btn ${activeTab === "login" ? "active" : ""}`}
+              onClick={() => setActiveTab("login")}
+            >
+              🔑 Account Login
+            </button>
+          )}
+          {!hideTabs.includes("register") && (
+            <button
+              className={`auth-tab-btn ${activeTab === "register" ? "active" : ""}`}
+              onClick={() => setActiveTab("register")}
+            >
+              ✨ Register New User
+            </button>
+          )}
         </div>
 
         <div className="auth-tab-body">
