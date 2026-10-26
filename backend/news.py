@@ -12,7 +12,9 @@ import datetime
 import email.utils
 import hashlib
 import html
+import json
 import logging
+import os
 import re
 import time
 import urllib.parse
@@ -21,7 +23,14 @@ import xml.etree.ElementTree as ET
 from typing import Any, Literal
 
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 logger = logging.getLogger("srujana_f06.news")
+NEWS_API_KEY = os.getenv("NEWS_API_KEY", "").strip()
 
 SentimentType = Literal["bullish", "bearish", "neutral"]
 ScenarioIdType = Literal["crash", "rates", "technology", "fx", "custom"]
@@ -463,6 +472,114 @@ MARKET_PILLARS: list[tuple[str, str]] = [
 ]
 
 
+def _fetch_from_finnhub(category: str = "general", asset: str | None = None, limit: int = 15) -> list[dict[str, Any]]:
+    """Fetch live market news from Finnhub API via FINNHUB_API_KEY environment variable."""
+    token = os.getenv("FINNHUB_API_KEY", "").strip()
+    if not token:
+        return []
+    try:
+        now_dt = datetime.datetime.now(datetime.timezone.utc)
+        today = now_dt.strftime("%Y-%m-%d")
+        week_ago = (now_dt - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+
+        if asset and asset != "ALL":
+            symbol_map = {"TCS.NS": "TCS", "INFY.NS": "INFY", "HDFCBANK.NS": "HDB"}
+            finnhub_sym = symbol_map.get(asset, asset.replace(".NS", ""))
+            url = f"https://finnhub.io/api/v1/company-news?symbol={finnhub_sym}&from={week_ago}&to={today}&token={token}"
+        else:
+            url = f"https://finnhub.io/api/v1/news?category={category}&token={token}"
+
+        req = urllib.request.Request(url, headers={"User-Agent": "VertexRiskLab/1.0"})
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if not isinstance(data, list):
+                return []
+
+            articles: list[dict[str, Any]] = []
+            for item in data[:limit]:
+                headline = clean_html(item.get("headline") or "")
+                summary = clean_html(item.get("summary") or "")
+                if not headline:
+                    continue
+
+                ts = item.get("datetime")
+                pub_iso = (
+                    datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat()
+                    if ts
+                    else now_dt.isoformat()
+                )
+
+                full_text = f"{headline} {summary}"
+                sentiment = analyze_article_sentiment(full_text)
+                related = map_related_assets(full_text)
+                if asset and asset != "ALL" and asset not in related:
+                    related.append(asset)
+
+                scenario, cat, impact = determine_scenario_and_category(full_text, related)
+
+                articles.append({
+                    "id": "finnhub-" + hashlib.md5(headline.encode("utf-8")).hexdigest()[:10],
+                    "headline": headline,
+                    "summary": summary or headline,
+                    "source": item.get("source") or "Finnhub Financial",
+                    "publishedAt": pub_iso,
+                    "url": item.get("url") or "",
+                    "relatedAssets": related,
+                    "sentiment": sentiment,
+                    "impactEstimate": impact,
+                    "category": cat,
+                    "suggestedScenarioId": scenario,
+                    "isLive": True,
+                })
+            return articles
+    except Exception as exc:
+        logger.warning("Finnhub live fetch failed (%s); falling back to live RSS crawler", exc)
+        return []
+
+
+def _fetch_from_newsapi(query: str | None = None, limit: int = 15) -> list[dict[str, Any]]:
+    """Fetch live news from newsapi.org if NEWS_API_KEY environment variable is configured."""
+    api_key = os.getenv("NEWS_API_KEY", "").strip()
+    if not api_key:
+        return []
+    try:
+        q = urllib.parse.quote(query or "Indian stock market economy")
+        url = f"https://newsapi.org/v2/everything?q={q}&language=en&sortBy=publishedAt&pageSize={limit}&apiKey={api_key}"
+        req = urllib.request.Request(url, headers={"User-Agent": "VertexRiskLab/1.0"})
+        with urllib.request.urlopen(req, timeout=3.5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("status") != "ok":
+                return []
+            articles = []
+            for item in data.get("articles", [])[:limit]:
+                title = clean_html(item.get("title") or "")
+                desc = clean_html(item.get("description") or "")
+                if not title:
+                    continue
+                full_text = f"{title} {desc}"
+                sentiment = analyze_article_sentiment(full_text)
+                related_assets = map_related_assets(full_text)
+                suggested_scenario, category, impact = determine_scenario_and_category(full_text, related_assets)
+                articles.append({
+                    "id": "newsapi-" + hashlib.md5(title.encode("utf-8")).hexdigest()[:10],
+                    "headline": title,
+                    "summary": desc or title,
+                    "source": item.get("source", {}).get("name") or "NewsAPI",
+                    "publishedAt": item.get("publishedAt") or datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "url": item.get("url") or "",
+                    "relatedAssets": related_assets,
+                    "sentiment": sentiment,
+                    "impactEstimate": impact,
+                    "category": category,
+                    "suggestedScenarioId": suggested_scenario,
+                    "isLive": True,
+                })
+            return articles
+    except Exception as exc:
+        logger.warning("NewsAPI fetch failed (%s); falling back to live RSS crawler", exc)
+        return []
+
+
 def fetch_live_market_news(
     query: str | None = None,
     asset: str | None = None,
@@ -471,10 +588,8 @@ def fetch_live_market_news(
     """
     Fetch live financial market news.
     Uses in-memory cache (300s TTL).
-    Employs multi-pillar concurrent RSS sourcing and token similarity deduplication to ensure
-    broad, diverse market coverage (Equities, IT, Banking, Commodities, Forex, Bonds, Macro)
-    instead of clustering on repetitive headlines.
-    Falls back gracefully to curated catalysts if the network or external feed fails.
+    Fetches live feeds from Finnhub API (via FINNHUB_API_KEY env)
+    interleaved with 7-pillar Indian market RSS feeds for comprehensive global + domestic coverage.
     """
     now = time.time()
     cache_key = f"{query or ''}:{asset or ''}:{limit}"
@@ -486,8 +601,22 @@ def fetch_live_market_news(
             logger.debug("Serving market news from in-memory cache (%d items)", len(cached_data))
             return cached_data
 
+    # Priority 1: Check if external NEWS_API_KEY is configured in environment
+    if os.getenv("NEWS_API_KEY", "").strip():
+        api_articles = _fetch_from_newsapi(query=query or asset, limit=limit)
+        if api_articles:
+            _NEWS_CACHE[cache_key] = (now + CACHE_TTL_SECONDS, api_articles)
+            return api_articles
+
     seen_tokens: list[set[str]] = []
     live_articles: list[dict[str, Any]] = []
+
+    # Priority 2: Fetch live Finnhub global market articles
+    finnhub_articles = _fetch_from_finnhub(category="general", asset=asset, limit=limit)
+    for art in finnhub_articles:
+        tokens = extract_headline_tokens(art["headline"])
+        seen_tokens.append(tokens)
+        live_articles.append(art)
 
     # Case 1: User requested a specific targeted query or single asset
     if query or (asset and asset != "ALL"):

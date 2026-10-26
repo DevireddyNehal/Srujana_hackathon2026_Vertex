@@ -6,6 +6,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
