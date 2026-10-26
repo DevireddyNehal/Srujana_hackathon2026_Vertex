@@ -2794,12 +2794,28 @@ html[data-theme="light"] option,
   width: 100% !important;
 }
 
+.aperture-app .overview-right-column {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+  min-width: 0 !important;
+  height: 100% !important;
+}
+
+.aperture-app .overview-right-column > .diagnostics-panel,
 .aperture-app .overview-grid > .diagnostics-panel {
   grid-column: auto !important;
   width: 100% !important;
-  height: 100% !important;
+  height: auto !important;
   display: flex !important;
   flex-direction: column !important;
+}
+
+.aperture-app .overview-right-column > .overview-allocation-teaser,
+.aperture-app .overview-right-column > .overview-compare-teaser,
+.aperture-app .overview-right-column > .page-endcap {
+  margin: 0 !important;
+  width: 100% !important;
 }
 
 .aperture-app .stress-page-grid > .api-risk-panel,
