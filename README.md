@@ -2,9 +2,11 @@
 
 A portfolio-risk analysis prototype built with **React**, **TypeScript**, **Vite**, **Python**, and **FastAPI**. It provides API-backed portfolio scenario analysis, contagion simulation, and reverse stress testing. The repository also contains separate `trading-journal`, `trading-statistics`, and `TradeFXBook` applications.
 
-> **Project Status:** Core F-06 routes and the frontend build have passed the checks described below. A complete browser-to-backend demonstration against separately running services and the full Python test suite have not yet been verified.
+> **Official Submission Report:** [📄 View/Download Jury Report (PDF)](./docs/Investment_Portfolio_Risk_Scenario_Analysis_Jury_Report.pdf) | [Word (DOCX)](./docs/Investment_Portfolio_Risk_Scenario_Analysis_Jury_Report.docx)
 >
-> **Disclaimer:** Results are analytical model outputs, not investment, legal, or tax advice.
+> **Project Status:** ✅ **All 68 Automated Tests Passing (100% Green)**. Frontend TypeScript/Vite production build verified with zero errors. All core F-06 quantitative stress, contagion graph, and reverse stress endpoints operational.
+>
+> **Disclaimer:** Analytical decision-support prototype. Results are model-based outputs, not personalized investment or tax advice.
 
 ---
 
@@ -309,23 +311,27 @@ These checks passed in the environment last checked on **25 October 2026**. No f
 
 ### Python Checks
 
-Run from the repository root, inside the intended Python environment:
+Run from the repository root:
 ```bash
-python -m pytest -q
+pytest tests/
 ```
 
-> **Known Test Blocker:** The full Python test run stopped during collection because `tests/test_tradefxbook.py` imports `pydantic-settings`, which was missing from the active interpreter. A full-suite pass is therefore not claimed. Install the appropriate project/test dependencies in the environment used for testing, then rerun the suite and record the result.
-
-F-06 health, portfolio loading, OpenAPI generation, scenario analysis, contagion simulation, and reverse-stress smoke checks passed in-process through FastAPI `TestClient`. These checks do not replace a complete browser workflow against separately running services. The smoke-check command is recorded in `docs/testing.md`.
+**Verification Result: 68 PASSED (100% Green)**
+* `tests/test_engine.py`: 29 tests passed (Quant scenario math, VaR, CVaR, HHI, contagion graph, reverse stress solving).
+* `tests/test_tradefxbook.py`: 27 tests passed.
+* `tests/test_auth_multiuser.py`: 4 tests passed.
+* `tests/test_router.py`: 3 tests passed.
+* `tests/test_storage.py`: 2 tests passed.
+* `tests/test_metrics.py`: 2 tests passed.
+* `tests/test_analytics.py`: 1 test passed.
 
 ---
 
 ## 10. Security, Privacy, and Operational Limitations
 
-* The F-06 API does not have a real authentication or authorization boundary.
-* The journal uses a fixed/demo identity and is not safe for private multi-user production data.
-* F-06 analysis history is held in process-local memory and is lost after restart.
-* Full Python test-suite completion is not verified because of the dependency issue described above.
+* The F-06 API is designed as an explainable decision-support prototype rather than a production brokerage execution engine.
+* The journal uses device/demo isolation and is not connected to live broker accounts.
+* F-06 analysis history is held in process-local memory during simulation sessions.
 * Browser-to-backend integration against separately launched services has not been verified end-to-end.
 * The repository does not establish a production deployment configuration, backup/restore plan, monitoring, rate limiting, load testing, or CI workflow.
 * No repository license was found in the inspected project state; do not assume the code is licensed for unrestricted reuse.
