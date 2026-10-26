@@ -2976,6 +2976,20 @@ export default function Dashboard() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
+  useEffect(() => {
+    // Canonical URL synchronization: ensure bare domain routes normalize to ?page=overview
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.get("page")) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("page", "overview");
+        window.history.replaceState({ page: "overview" }, "", url.toString());
+      }
+    } catch {
+      // fallback
+    }
+  }, []);
+
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     if (typeof localStorage !== "undefined") {
       const stored = localStorage.getItem("vertex_active_user");
