@@ -27,24 +27,34 @@ A portfolio-risk analysis prototype built with **React**, **TypeScript**, **Vite
 
 ---
 
-## 1. Project Overview
+## 1. About the Project & Overview
 
-**F-06** focuses on examining how specified market scenarios and adverse conditions may affect a portfolio. Users can load demo portfolios, submit scenarios for analysis, explore contagion simulations, and run reverse stress tests through the web interface and FastAPI service.
+**Vertex Portfolio Risk Lab** is an interactive, quantitative decision-support environment developed for **Problem Statement F-06 (Investment Portfolio Risk & Scenario Analysis)** at **Srujana Tech Fest 2026**.
 
-The repository is a prototype, not a production investment platform. Its results depend on the supplied data, scenario assumptions, and implemented analytical methods. They should not be interpreted as guaranteed forecasts or personalized investment recommendations.
+It addresses the fundamental challenge of hidden portfolio risk: allowing investors to look beyond static returns and evaluate how multi-factor market crashes, interest-rate shifts, sector disruptions, currency shocks, and cross-asset contagion affect their holdings in real time.
+
+### About the Team
+* **Nehal Devireddy** — Project Lead & Quantitative Architecture (`backend/engine/quant.py`, `backend/engine/contagion.py`, `backend/engine/ai_agent.py`)
+* **Zama** — Backend & API Engineering (`backend/main.py`, `backend/database.py`, mock fixtures)
+* **Ahmad** — Frontend Lead (React/TypeScript application shell, page routing, and state orchestration)
+* **Shyam** — UI Widgets & Presentation (Correlation heatmap, scenario shock controls, historical vs. hypothetical projection charts)
+
+### Official Project Documentation
+* 📄 **Jury Evaluation Report (PDF):** [`docs/Investment_Portfolio_Risk_Scenario_Analysis_Jury_Report.pdf`](./docs/Investment_Portfolio_Risk_Scenario_Analysis_Jury_Report.pdf)
+* 📝 **Jury Evaluation Report (Word):** [`docs/Investment_Portfolio_Risk_Scenario_Analysis_Jury_Report.docx`](./docs/Investment_Portfolio_Risk_Scenario_Analysis_Jury_Report.docx)
 
 ### Core F-06 Capabilities
 
 * **Portfolio loading:** Reads demo portfolio fixtures from `mock-data/portfolios.json`.
 * **Scenario analysis:** Accepts scenario requests through `POST /api/analyze-scenario`.
-* **Contagion simulation:** Provides scenario discovery and simulation endpoints for portfolio contagion analysis.
-* **Reverse stress testing:** Exposes an endpoint for evaluating reverse-stress requests.
+* **Contagion simulation:** Models directed-graph contagion across economic dependencies via `POST /api/contagion/simulate`.
+* **Reverse stress testing:** Solves for catastrophic threshold breaking points via `POST /api/reverse-stress-test`.
 * **Risk interface:** Provides React views that call the FastAPI backend for risk-related results.
 * **Historical-data artifacts:** Includes CSV/JSON artifacts and metadata under `f06_historical_dataset/`.
 
 ### Other Applications in This Repository
 
-The repository also includes a SQLite-backed trading journal mounted in the main API, a separate trading-statistics service, and a separate TradeFXBook application. These are distinct components and should not be presented as features of the F-06 risk engine unless they are explicitly included in the demonstrated workflow.
+The repository also includes a SQLite-backed trading journal mounted in the main API, a separate trading-statistics service, and a separate TradeFXBook application. These are distinct modular components.
 
 ---
 

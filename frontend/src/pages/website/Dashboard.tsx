@@ -3780,20 +3780,31 @@ export default function Dashboard() {
         </div>
         <footer className="app-footer">
           <span><span className="footer-mark">V</span> VERTEX <span>PORTFOLIO RISK LAB</span></span>
-          <p>DEMO MODE · Mock data only · Scenario outputs are not forecasts or guarantees.</p>
-          <a
-            href="?page=overview"
-            onClick={(e) => {
-              e.preventDefault();
-              if (activePage === "overview") {
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              } else {
-                navigateTo("overview");
-              }
-            }}
-          >
-            Overview ↑
-          </a>
+          <p>Srujana Tech Fest 2026 · Problem F-06 · Built by Nehal, Zama, Ahmad &amp; Shyam</p>
+          <div style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
+            <a
+              href="/Investment_Portfolio_Risk_Scenario_Analysis_Jury_Report.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="View Official F-06 Project Report"
+              style={{ color: "var(--accent, #3b82f6)", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "4px" }}
+            >
+              📄 <span>About &amp; Jury Report (PDF)</span>
+            </a>
+            <a
+              href="?page=overview"
+              onClick={(e) => {
+                e.preventDefault();
+                if (activePage === "overview") {
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                } else {
+                  navigateTo("overview");
+                }
+              }}
+            >
+              Overview ↑
+            </a>
+          </div>
         </footer>
       </div>
       <AuthModal
