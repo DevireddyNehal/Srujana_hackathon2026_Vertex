@@ -214,10 +214,9 @@ if tradefxbook_router:
 
 
 def _get_cors_origins() -> list[str]:
-    raw = os.getenv(
-        "CORS_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
-    )
+    raw = os.getenv("CORS_ORIGINS", "*")
+    if raw.strip() == "*":
+        return ["*"]
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
@@ -225,9 +224,21 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_get_cors_origins(),
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/")
+def root() -> dict[str, Any]:
+    """Root welcome endpoint for health and API discovery."""
+    return {
+        "status": "ok",
+        "service": "Vertex Portfolio Risk & Contagion Simulation Engine",
+        "version": "1.0.0",
+        "health": "/health",
+        "docs": "/docs",
+    }
 
 
 @app.get("/health")
