@@ -4,187 +4,16 @@ import './NewsIntelligenceWidget.css';
 import type { Portfolio } from '../../pages/website/portfolioData';
 import { getMarketNews } from '../../api/client';
 
-export interface NewsArticle {
-  id: string;
-  headline: string;
-  summary: string;
-  source: string;
-  publishedAt: string;
-  url?: string;
-  relatedAssets?: string[];
-  sentiment?: 'bullish' | 'bearish' | 'neutral';
-  impactEstimate?: string;
-  category?: string;
-  suggestedScenarioId?: 'crash' | 'rates' | 'technology' | 'fx' | 'custom';
-  isLive?: boolean;
-}
+import { type NewsArticle, DEFAULT_NEWS_ARTICLES } from './newsArticles';
+export type { NewsArticle };
+export { DEFAULT_NEWS_ARTICLES };
 
 export interface NewsIntelligenceWidgetProps {
   articles?: NewsArticle[];
   portfolio?: Portfolio;
   currency?: 'INR' | 'USD';
-  onNavigateToStressLab?: (headline: string, affectedTicker?: string, scenarioId?: string) => void;
+  onNavigateToStressLab?: (headline: string, affectedTicker?: string, scenarioId?: string, article?: NewsArticle) => void;
 }
-
-
-const DEFAULT_NEWS_ARTICLES: NewsArticle[] = [
-  {
-    id: 'news-1',
-    headline: 'RBI Maintains Repo Rate at 6.50% Amid Lingering Food Price Pressures and Global Inflation Risks',
-    summary: 'The Reserve Bank of India Monetary Policy Committee voted to keep benchmark repo rates unchanged at 6.50%, reiterating its stance of withdrawal of accommodation. Governor Das highlighted persistent volatility in vegetable and food prices while pointing to steady domestic GDP growth.',
-    source: 'Bloomberg / Mint',
-    publishedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
-    url: 'https://www.livemint.com/economy',
-    relatedAssets: ['GSEC10Y_MOCK', 'CORP_BOND_FUND_MOCK', 'LIQUIDBEES.NS'],
-    sentiment: 'neutral',
-    impactEstimate: '+0.12% Yield Stability',
-    category: 'Macro & Policy',
-    suggestedScenarioId: 'rates',
-  },
-  {
-    id: 'news-2',
-    headline: 'TCS Secures $1.2B Enterprise Cloud & AI Modernization Contract with European Telecom Leader',
-    summary: 'Tata Consultancy Services announced a multi-year digital transformation mandate to overhaul IT core infrastructure, migrate workloads to hybrid cloud platforms, and implement generative AI governance workflows across customer service centers.',
-    source: 'Economic Times',
-    publishedAt: new Date(Date.now() - 75 * 60 * 1000).toISOString(),
-    url: 'https://economictimes.indiatimes.com/tech',
-    relatedAssets: ['TCS.NS', 'USD_INR'],
-    sentiment: 'bullish',
-    impactEstimate: '+2.4% Revenue Growth',
-    category: 'Information Technology',
-    suggestedScenarioId: 'technology',
-  },
-  {
-    id: 'news-3',
-    headline: 'US Enterprise Tech Budgets Tighten as CFOs Extend Approval Cycles for Discretionary Cloud Projects',
-    summary: 'Industry survey indicates North American Fortune 500 corporations are delaying non-critical digital transformation renewals, creating near-term revenue visibility headwinds for tier-1 Indian software service exporters.',
-    source: 'Reuters Financial',
-    publishedAt: new Date(Date.now() - 140 * 60 * 1000).toISOString(),
-    url: 'https://www.reuters.com/technology',
-    relatedAssets: ['TCS.NS', 'INFY.NS', 'USD_INR'],
-    sentiment: 'bearish',
-    impactEstimate: '-2.8% IT Margin Scrutiny',
-    category: 'Information Technology',
-    suggestedScenarioId: 'technology',
-  },
-  {
-    id: 'news-4',
-    headline: 'HDFC Bank Deposits Expand 18.2% YoY, Narrowing Credit-to-Deposit Gap Across Retail Branches',
-    summary: 'Private banking heavyweight HDFC Bank reported strong sequential growth in low-cost CASA deposits, alleviating investor concerns regarding wholesale funding costs and stabilizing net interest margins.',
-    source: 'Business Standard',
-    publishedAt: new Date(Date.now() - 210 * 60 * 1000).toISOString(),
-    url: 'https://www.business-standard.com/finance',
-    relatedAssets: ['HDFCBANK.NS', 'NIFTYBEES.NS'],
-    sentiment: 'bullish',
-    impactEstimate: '+1.9% NIM Support',
-    category: 'Banking & Financials',
-    suggestedScenarioId: 'crash',
-  },
-  {
-    id: 'news-5',
-    headline: 'India 10-Year Benchmark G-Sec Yield Tests 7.18% Following US Treasury Sell-Off and Crude Oil Rebound',
-    summary: 'Domestic sovereign debt yields edged higher tracking elevated US 10-year Treasury yields above 4.35%. Bond dealers noted institutional caution ahead of upcoming government bond auctions and weekly liquidity deficits.',
-    source: 'Financial Express',
-    publishedAt: new Date(Date.now() - 320 * 60 * 1000).toISOString(),
-    url: 'https://www.financialexpress.com/market',
-    relatedAssets: ['GSEC10Y_MOCK', 'CORP_BOND_FUND_MOCK'],
-    sentiment: 'bearish',
-    impactEstimate: '-0.7% Duration Mark-to-Market',
-    category: 'Fixed Income',
-    suggestedScenarioId: 'rates',
-  },
-  {
-    id: 'news-6',
-    headline: 'Domestic Gold Prices Surge Past ₹72,500/10g on Geopolitical Safe-Haven Bids and Central Bank Reserves',
-    summary: 'Spot and futures gold contracts touched fresh highs in Mumbai and Delhi bullion markets as geopolitical frictions along key shipping lanes accelerated portfolio hedging demand from institutional and retail asset allocators.',
-    source: 'Moneycontrol',
-    publishedAt: new Date(Date.now() - 430 * 60 * 1000).toISOString(),
-    url: 'https://www.moneycontrol.com/commodity',
-    relatedAssets: ['GOLDBEES.NS'],
-    sentiment: 'bullish',
-    impactEstimate: '+3.5% Hedge Outperformance',
-    category: 'Commodities',
-    suggestedScenarioId: 'crash',
-  },
-  {
-    id: 'news-7',
-    headline: 'Indian Rupee Stabilizes Near 83.42 Against USD as RBI Active Liquidity Operations Check Volatility',
-    summary: 'The central bank maintained active interventions in non-deliverable forward markets and onshore spot desks, curbing speculative pressure on the rupee despite dollar strength and foreign institutional rebalancing outflows.',
-    source: 'CNBC-TV18',
-    publishedAt: new Date(Date.now() - 560 * 60 * 1000).toISOString(),
-    url: 'https://www.cnbctv18.com/market',
-    relatedAssets: ['USD_INR', 'TCS.NS', 'INFY.NS'],
-    sentiment: 'neutral',
-    impactEstimate: 'FX Volatility Dampened',
-    category: 'Forex & Currencies',
-    suggestedScenarioId: 'fx',
-  },
-  {
-    id: 'news-8',
-    headline: 'ITC Highlights Non-Cigarette FMCG Margin Expansion and Robust Rural Demand Signals',
-    summary: 'Consumer goods bellwether ITC reported resilient rural volume traction across packaged foods and personal care divisions, supported by normalized agricultural commodity input costs and integrated supply chains.',
-    source: 'The Hindu BusinessLine',
-    publishedAt: new Date(Date.now() - 690 * 60 * 1000).toISOString(),
-    url: 'https://www.thehindubusinessline.com',
-    relatedAssets: ['ITC.NS', 'NIFTYBEES.NS'],
-    sentiment: 'bullish',
-    impactEstimate: '+1.6% Operating Resilience',
-    category: 'Consumer Staples',
-    suggestedScenarioId: 'crash',
-  },
-  {
-    id: 'news-9',
-    headline: 'SEBI Enforces Rigorous Valuation and Disclosure Frameworks for Locked Real Estate and Illiquid Debt',
-    summary: 'Capital markets regulator SEBI introduced tightened periodic valuation guidelines for alternative investment funds holding illiquid commercial real estate and structured debt assets to ensure transparency in retail fund redemptions.',
-    source: 'Livemint',
-    publishedAt: new Date(Date.now() - 840 * 60 * 1000).toISOString(),
-    url: 'https://www.livemint.com/mutual-fund',
-    relatedAssets: ['REALTY_LOCKED', 'REIT_LOCKED_MOCK'],
-    sentiment: 'bearish',
-    impactEstimate: '-2.9% Liquidity Valuation Haircut',
-    category: 'Real Estate & Credit',
-    suggestedScenarioId: 'crash',
-  },
-  {
-    id: 'news-10',
-    headline: 'Infosys Expands Enterprise Generative AI Platform ‘Topaz’ with Over 300 Global Engagements',
-    summary: 'Infosys highlighted rapid scaling of its Topaz generative AI capabilities across global financial services and life sciences clients, unlocking productivity improvements and boosting higher-margin digital contract bookings.',
-    source: 'TechCircle',
-    publishedAt: new Date(Date.now() - 980 * 60 * 1000).toISOString(),
-    url: 'https://www.techcircle.in',
-    relatedAssets: ['INFY.NS', 'TCS.NS'],
-    sentiment: 'bullish',
-    impactEstimate: '+1.8% Digital Margin Expansion',
-    category: 'Information Technology',
-    suggestedScenarioId: 'technology',
-  },
-  {
-    id: 'news-11',
-    headline: 'Corporate Bond Spreads Compress to 3-Year Lows on Sustained Institutional Mutual Fund Liquidity',
-    summary: 'Yield spreads on AAA-rated corporate debt contracted relative to government benchmarks as domestic mutual funds deployed strong debt SIP inflows into high-grade corporate bonds and short-duration liquid assets.',
-    source: 'Crisil Research',
-    publishedAt: new Date(Date.now() - 1140 * 60 * 1000).toISOString(),
-    url: 'https://www.crisil.com',
-    relatedAssets: ['CORP_BOND_FUND_MOCK', 'LIQUIDBEES.NS'],
-    sentiment: 'bullish',
-    impactEstimate: '+0.5% Credit Spread Carry',
-    category: 'Fixed Income',
-    suggestedScenarioId: 'rates',
-  },
-  {
-    id: 'news-12',
-    headline: 'Nifty 50 Navigates Intraday Swings as FIIs Rotate Capital Toward Defensive and Large-Cap Counters',
-    summary: 'The benchmark Nifty 50 consolidated in a tight range as institutional investors balanced broader global macroeconomic headwinds with robust domestic retail equity participation and sound corporate balance sheets.',
-    source: 'NDTV Profit',
-    publishedAt: new Date(Date.now() - 1320 * 60 * 1000).toISOString(),
-    url: 'https://www.ndtvprofit.com/markets',
-    relatedAssets: ['NIFTYBEES.NS', 'HDFCBANK.NS', 'ITC.NS'],
-    sentiment: 'neutral',
-    impactEstimate: 'Market Beta Neutral',
-    category: 'Equities',
-    suggestedScenarioId: 'crash',
-  },
-];
 
 function analyzeSentiment(text: string): 'bullish' | 'bearish' | 'neutral' {
   const lower = text.toLowerCase();
@@ -406,7 +235,7 @@ export const NewsIntelligenceWidget: React.FC<NewsIntelligenceWidgetProps> = ({
     const primaryAsset = selectedArticle.relatedAssets?.[0];
     const scenarioId = selectedArticle.suggestedScenarioId ?? 'crash';
     if (onNavigateToStressLab) {
-      onNavigateToStressLab(selectedArticle.headline, primaryAsset, scenarioId);
+      onNavigateToStressLab(selectedArticle.headline, primaryAsset, scenarioId, selectedArticle);
     } else {
       window.location.href = `index.html?page=stresslab&scenario=${scenarioId}`;
     }

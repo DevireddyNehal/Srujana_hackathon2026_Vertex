@@ -546,34 +546,34 @@ button {
   gap: 16px;
 }
 
-.stress-page-grid > .diagnostics-panel {
+.stress-page-grid > .diagnostics-panel,
+.stress-page-grid > .catalyst-station {
   grid-column: 1 / -1;
   width: 100%;
 }
 
-.overview-grid > .diagnostics-panel,
-.overview-right-column > .diagnostics-panel {
+.overview-grid > .diagnostics-panel {
   width: 100%;
-  height: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.overview-right-column {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.overview-right-column > .overview-allocation-teaser,
-.overview-right-column > .overview-compare-teaser {
+.overview-footer-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.overview-footer-flow > .overview-allocation-teaser,
+.overview-footer-flow > .overview-compare-teaser {
   margin: 0;
   width: 100%;
 }
 
-.overview-right-column > .overview-endcap {
+.overview-footer-flow > .overview-endcap {
   margin: 0;
   width: 100%;
 }
@@ -2953,13 +2953,260 @@ button {
   font-size: 7px;
 }
 
-.diagnostic-footnote {
-  margin: auto 13px 13px;
-  padding: 8px 9px;
-  border-top: 1px solid #efedf4;
-  color: #9795a6;
-  font-size: 7px;
-  line-height: 1.45;
+/* QUANTITATIVE RISK & REBALANCE ENGINE IN DIAGNOSTICS */
+.quant-engine-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--canvas, #faf9fd);
+  border-top: 1px solid var(--line, #f0eff5);
+  border-bottom: 1px solid var(--line, #f0eff5);
+}
+
+.quant-engine-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.quant-engine-title {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink, #1c1a2e);
+}
+
+.quant-run-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #c7c1ec;
+  border-radius: 6px;
+  background: #5c53aa;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 160ms ease;
+  white-space: nowrap;
+}
+
+.quant-run-btn:hover:not(:disabled) {
+  background: #4b4295;
+  transform: translateY(-1px);
+}
+
+.quant-run-btn.synced {
+  background: #15803d;
+  border-color: #86efac;
+}
+
+.quant-run-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.quant-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.quant-kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e8e7f0);
+  border-radius: 6px;
+  transition: transform 120ms ease;
+}
+
+.quant-kpi-card.highlight-green {
+  border-left: 3px solid #16a34a;
+}
+
+.quant-kpi-card.highlight-purple {
+  border-left: 3px solid #7c3aed;
+}
+
+.quant-kpi-label {
+  font-size: 7.5px;
+  font-weight: 600;
+  color: var(--muted, #7b798e);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.quant-kpi-value {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--ink, #1c1a2e);
+  line-height: 1.25;
+}
+
+.quant-kpi-value.positive {
+  color: #15803d;
+}
+
+.quant-kpi-sub {
+  font-size: 7.5px;
+  color: var(--muted, #89879b);
+  line-height: 1.25;
+}
+
+.quant-rebalance-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e8e7f0);
+  border-radius: 6px;
+}
+
+.quant-rebalance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quant-rebalance-label {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #555368);
+}
+
+.quant-rebalance-badge {
+  font-size: 7.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #edeaf9;
+  color: #5c53aa;
+}
+
+.quant-trades-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.quant-trade-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 5px;
+  background: var(--canvas, #faf9fd);
+  border: 1px solid var(--line, #f0eff5);
+  font-size: 10px;
+}
+
+.quant-trade-row .trade-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.quant-trade-row .trade-badge.trim {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.quant-trade-row .trade-badge.allocate {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.quant-trade-row .trade-meta {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.quant-trade-row .trade-meta strong {
+  font-size: 10.5px;
+  color: var(--ink, #1c1a2e);
+}
+
+.quant-trade-row .trade-meta small {
+  font-size: 8px;
+  color: var(--muted, #7b798e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quant-trade-row .trade-delta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--mono);
+}
+
+.quant-trade-row .trade-delta span {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.quant-trade-row .trade-delta small {
+  font-size: 8px;
+  color: var(--muted, #7b798e);
+}
+
+.quant-trades-empty {
+  padding: 8px 10px;
+  font-size: 9px;
+  color: var(--muted, #7b798e);
+  background: var(--canvas, #faf9fd);
+  border-radius: 4px;
+}
+
+.quant-adopt-btn {
+  width: 100%;
+  padding: 9px 12px;
+  margin-top: 2px;
+  border: none;
+  border-radius: 6px;
+  background: #2eaf7d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 160ms ease;
+}
+
+.quant-adopt-btn:hover {
+  background: #25966a;
+  transform: translateY(-1px);
+}
+
+.quant-adopt-btn.adopted {
+  background: #16803c;
+}
+
+.quant-footnote {
+  margin: 2px 0 0;
+  font-size: 7.5px;
+  color: var(--muted, #89879b);
+  line-height: 1.4;
 }
 
 .comparison-panel {

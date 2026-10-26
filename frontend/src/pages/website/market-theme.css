@@ -2789,7 +2789,8 @@ html[data-theme="light"] option,
   color: var(--market-positive, #2EAF7D);
 }
 
-.aperture-app .stress-page-grid > .diagnostics-panel {
+.aperture-app .stress-page-grid > .diagnostics-panel,
+.aperture-app .stress-page-grid > .catalyst-station {
   grid-column: 1 / -1 !important;
   width: 100% !important;
 }

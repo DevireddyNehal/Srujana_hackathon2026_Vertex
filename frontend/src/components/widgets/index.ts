@@ -5,4 +5,5 @@ export * from './NewsIntelligenceWidget';
 export * from './TradingJournalWidget';
 export * from './UserStatisticsWidget';
 export * from './AuthModal';
-
+export * from './CatalystStressStation';
+export * from './newsArticles';
