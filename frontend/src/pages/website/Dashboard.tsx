@@ -2662,37 +2662,6 @@ export default function Dashboard() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  const [portfolioId, setPortfolioId] = useState(savedState?.portfolioId ?? portfolios[0].id);
-  const basePortfolio = portfolios.find((item) => item.id === portfolioId) ?? portfolios[0];
-  const [customHoldings, setCustomHoldings] = useState<Holding[] | null>(null);
-  const [rebalanceAdopted, setRebalanceAdopted] = useState(false);
-  const portfolio = useMemo(() => {
-    if (!customHoldings) return basePortfolio;
-    return { ...basePortfolio, holdings: customHoldings };
-  }, [basePortfolio, customHoldings]);
-  const [weights, setWeights] = useState(savedState?.weights ?? portfolio.holdings.map((holding) => holding.weight));
-  const [alternativeWeights, setAlternativeWeights] = useState(savedState?.alternativeWeights ?? createAlternativeWeights(portfolio));
-  const [period, setPeriod] = useState<12 | 24>(savedState?.period ?? 12);
-  const [currency, setCurrency] = useState<Currency>(savedState?.currency ?? "INR");
-  const [activeScenario, setActiveScenario] = useState<Scenario | null>(() => {
-    const urlScenarioParam = new URLSearchParams(window.location.search).get("scenario");
-    if (urlScenarioParam) {
-      const match = scenarios.find((s) => s.id === urlScenarioParam);
-      if (match) return match;
-    }
-    return savedState?.activeScenario ?? scenarios[0];
-  });
-  const [riskTolerance, setRiskTolerance] = useState(savedState?.riskTolerance ?? profileRisk(portfolio.investorProfile));
-  const [horizon, setHorizon] = useState(savedState?.horizon ?? portfolio.investorProfile.horizon_years);
-  const [liquidityNeed, setLiquidityNeed] = useState(savedState?.liquidityNeed ?? demoLiquidityNeed(portfolio));
-  const [lossLimit, setLossLimit] = useState(savedState?.lossLimit ?? 15);
-  const [maxTurnoverPct, setMaxTurnoverPct] = useState(savedState?.maxTurnoverPct ?? 25);
-  const [minLiquidityPct, setMinLiquidityPct] = useState(savedState?.minLiquidityPct ?? 20);
-  const [hedgePreference, setHedgePreference] = useState<"multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive">(savedState?.hedgePreference ?? "multi_asset");
-  const [darkMode, setDarkMode] = useState(loadSessionTheme);
-  const [diagnosticsFormVersion, setDiagnosticsFormVersion] = useState(0);
-  const pageMeta = pages.find((page) => page.id === activePage) ?? pages[0];
-
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     if (typeof localStorage !== "undefined") {
       const stored = localStorage.getItem("vertex_active_user");
@@ -2722,6 +2691,58 @@ export default function Dashboard() {
     }
     return "demo_token_demo_trader_01";
   });
+
+  const [portfolioId, setPortfolioId] = useState(savedState?.portfolioId ?? portfolios[0].id);
+  const basePortfolio = portfolios.find((item) => item.id === portfolioId) ?? portfolios[0];
+  const [customHoldings, setCustomHoldings] = useState<Holding[] | null>(null);
+  const [rebalanceAdopted, setRebalanceAdopted] = useState(false);
+
+  const traderMoneyInr = useMemo(() => {
+    if (!currentUser) return basePortfolio.marketValue;
+    if (currentUser.currency === "INR") return currentUser.starting_balance;
+    return Math.round(currentUser.starting_balance * illustrativeUsdInr);
+  }, [currentUser, basePortfolio.marketValue]);
+
+  const portfolio = useMemo(() => {
+    const marketValue = traderMoneyInr;
+    const owner = currentUser ? currentUser.name : basePortfolio.owner;
+    const baseTarget = basePortfolio.investorProfile.target_goal_inr || basePortfolio.marketValue;
+    const baseVal = basePortfolio.marketValue || 1;
+    const targetGoal = Math.round(marketValue * (baseTarget / baseVal));
+    return {
+      ...basePortfolio,
+      owner,
+      marketValue,
+      investorProfile: {
+        ...basePortfolio.investorProfile,
+        target_goal_inr: targetGoal,
+      },
+      holdings: customHoldings || basePortfolio.holdings,
+    };
+  }, [basePortfolio, customHoldings, traderMoneyInr, currentUser]);
+
+  const [weights, setWeights] = useState(savedState?.weights ?? portfolio.holdings.map((holding) => holding.weight));
+  const [alternativeWeights, setAlternativeWeights] = useState(savedState?.alternativeWeights ?? createAlternativeWeights(portfolio));
+  const [period, setPeriod] = useState<12 | 24>(savedState?.period ?? 12);
+  const [currency, setCurrency] = useState<Currency>(savedState?.currency ?? "INR");
+  const [activeScenario, setActiveScenario] = useState<Scenario | null>(() => {
+    const urlScenarioParam = new URLSearchParams(window.location.search).get("scenario");
+    if (urlScenarioParam) {
+      const match = scenarios.find((s) => s.id === urlScenarioParam);
+      if (match) return match;
+    }
+    return savedState?.activeScenario ?? scenarios[0];
+  });
+  const [riskTolerance, setRiskTolerance] = useState(savedState?.riskTolerance ?? profileRisk(portfolio.investorProfile));
+  const [horizon, setHorizon] = useState(savedState?.horizon ?? portfolio.investorProfile.horizon_years);
+  const [liquidityNeed, setLiquidityNeed] = useState(savedState?.liquidityNeed ?? demoLiquidityNeed(portfolio));
+  const [lossLimit, setLossLimit] = useState(savedState?.lossLimit ?? 15);
+  const [maxTurnoverPct, setMaxTurnoverPct] = useState(savedState?.maxTurnoverPct ?? 25);
+  const [minLiquidityPct, setMinLiquidityPct] = useState(savedState?.minLiquidityPct ?? 20);
+  const [hedgePreference, setHedgePreference] = useState<"multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive">(savedState?.hedgePreference ?? "multi_asset");
+  const [darkMode, setDarkMode] = useState(loadSessionTheme);
+  const [diagnosticsFormVersion, setDiagnosticsFormVersion] = useState(0);
+  const pageMeta = pages.find((page) => page.id === activePage) ?? pages[0];
 
   useEffect(() => {
     getDemoUsers()
@@ -2757,12 +2778,44 @@ export default function Dashboard() {
     setIsAuthModalOpen(true);
   }, []);
 
+  const TRADER_ARCHETYPE_MAP: Record<
+    string,
+    { portfolioId: string; risk: "Conservative" | "Moderate" | "Aggressive"; horizon: number }
+  > = {
+    demo_trader_01: { portfolioId: "conservative-retiree", risk: "Conservative", horizon: 3 },
+    demo_trader_02: { portfolioId: "tech-heavy", risk: "Aggressive", horizon: 1 },
+    demo_trader_03: { portfolioId: "tech-heavy", risk: "Aggressive", horizon: 2 },
+    demo_trader_04: { portfolioId: "tech-heavy", risk: "Moderate", horizon: 2 },
+    demo_trader_05: { portfolioId: "all-weather-balanced", risk: "Moderate", horizon: 3 },
+    demo_trader_06: { portfolioId: "tech-heavy", risk: "Aggressive", horizon: 1 },
+    demo_trader_07: { portfolioId: "tech-heavy", risk: "Aggressive", horizon: 1 },
+    demo_trader_08: { portfolioId: "all-weather-balanced", risk: "Conservative", horizon: 5 },
+    demo_trader_09: { portfolioId: "tech-heavy", risk: "Moderate", horizon: 2 },
+    demo_trader_10: { portfolioId: "all-weather-balanced", risk: "Moderate", horizon: 4 },
+  };
+
   const handleUserChanged = (user: UserProfile, token: string) => {
     setCurrentUser(user);
     setAuthToken(token);
     localStorage.setItem("vertex_active_user_id", user.id);
     localStorage.setItem("vertex_active_user", JSON.stringify(user));
     localStorage.setItem("vertex_auth_token", token);
+
+    const archetype = TRADER_ARCHETYPE_MAP[user.id];
+    const targetPortfolioId = archetype?.portfolioId || portfolioId;
+    const targetPortfolio = portfolios.find((p) => p.id === targetPortfolioId) || basePortfolio;
+
+    setPortfolioId(targetPortfolio.id);
+    setCustomHoldings(null);
+    setRebalanceAdopted(false);
+    setWeights(targetPortfolio.holdings.map((h) => h.weight));
+    setAlternativeWeights(createAlternativeWeights(targetPortfolio));
+    setRiskTolerance(archetype?.risk || profileRisk(targetPortfolio.investorProfile));
+    setHorizon(archetype?.horizon || targetPortfolio.investorProfile.horizon_years);
+
+    const traderInr = user.currency === "INR" ? user.starting_balance : Math.round(user.starting_balance * illustrativeUsdInr);
+    const assumedShare = targetPortfolio.investorProfile.liquidity_need === "High" ? 0.2 : targetPortfolio.investorProfile.liquidity_need === "Medium" ? 0.1 : 0.05;
+    setLiquidityNeed(Math.round(traderInr * 1.2 * assumedShare));
   };
 
 
@@ -3017,7 +3070,15 @@ export default function Dashboard() {
               <div className="breadcrumb">{pageMeta.eyebrow.toUpperCase()} <span>/</span> {pageMeta.title.toUpperCase()}</div>
               <h1>{activePage === "journal" ? "Trading Journal" : "User Trading Statistics"}<span className="title-separator">·</span><small className="portfolio-owner">{currentUser?.name || "Active Trader"}</small></h1>
               <div className="profile-metadata">
-                <span>Account <strong>{currentUser?.currency || "USD"} ${(currentUser?.starting_balance ?? 50000).toLocaleString()}</strong></span>
+                <span>
+                  Account{" "}
+                  <strong>
+                    {currency}{" "}
+                    {currency === "INR"
+                      ? `₹${Math.round((currentUser?.starting_balance ?? 50000) * (currentUser?.currency === "INR" ? 1 : illustrativeUsdInr)).toLocaleString("en-IN")}`
+                      : `$${(currentUser?.starting_balance ?? 50000).toLocaleString()}`}
+                  </strong>
+                </span>
                 <i />
                 <span>Timezone <strong>{currentUser?.timezone || "UTC"}</strong></span>
                 <i />
@@ -3027,7 +3088,7 @@ export default function Dashboard() {
           ) : (
             <div>
               <div className="breadcrumb">{pageMeta.eyebrow.toUpperCase()} <span>/</span> {pageMeta.title.toUpperCase()}</div>
-              <h1>{portfolio.name}<span className="title-separator">·</span><small className="portfolio-owner">{portfolio.owner}</small></h1>
+              <h1>{portfolio.name}<span className="title-separator">·</span><small className="portfolio-owner">{currentUser?.name || portfolio.owner}</small></h1>
               <div className="profile-metadata">
                 <span>Goal <strong>{money(portfolio.investorProfile.target_goal_inr, currency, true)}</strong></span>
                 <i />
@@ -3296,6 +3357,8 @@ export default function Dashboard() {
               currentUser={currentUser}
               authToken={authToken}
               onOpenAuthModal={openDemoSwitcher}
+              currency={currency}
+              conversionRate={illustrativeUsdInr}
             />
           )}
           {activePage === "userstats" && (
@@ -3303,6 +3366,8 @@ export default function Dashboard() {
               currentUser={currentUser}
               authToken={authToken}
               onOpenAuthModal={openDemoSwitcher}
+              currency={currency}
+              conversionRate={illustrativeUsdInr}
             />
           )}
           {activePage !== "overview" && (
@@ -3353,6 +3418,8 @@ export default function Dashboard() {
         onUserChanged={handleUserChanged}
         initialTab={authModalTab}
         hideTabs={authModalHideTabs}
+        currency={currency}
+        conversionRate={illustrativeUsdInr}
       />
     </main>
   );

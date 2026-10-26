@@ -12,6 +12,8 @@ interface AuthModalProps {
   onUserChanged: (user: UserProfile, token: string) => void;
   initialTab?: "demo" | "login" | "register";
   hideTabs?: Array<"demo" | "login" | "register">;
+  currency?: "INR" | "USD";
+  conversionRate?: number;
 }
 
 export function AuthModal({
@@ -21,6 +23,8 @@ export function AuthModal({
   onUserChanged,
   initialTab = "demo",
   hideTabs = [],
+  currency = "INR",
+  conversionRate = 83.5,
 }: AuthModalProps) {
   const [activeTab, setActiveTab] = useState<"demo" | "login" | "register">(initialTab);
   const [demoUsers, setDemoUsers] = useState<UserProfile[]>([]);
@@ -168,7 +172,13 @@ export function AuthModal({
         {currentUser && (
           <div className="current-user-banner">
             <span className="badge-dot"></span>
-            <span>Active Session: <strong>{currentUser.name}</strong> ({currentUser.currency} ${currentUser.starting_balance.toLocaleString()})</span>
+            <span>
+              Active Session: <strong>{currentUser.name}</strong> (
+              {currency === "INR"
+                ? `INR ₹${Math.round(currentUser.starting_balance * conversionRate).toLocaleString("en-IN")}`
+                : `${currentUser.currency} $${currentUser.starting_balance.toLocaleString()}`}
+              )
+            </span>
             {currentUser.is_demo && <span className="demo-pill">DEMO DATASET</span>}
           </div>
         )}
@@ -217,7 +227,11 @@ export function AuthModal({
                   >
                     <div className="demo-card-head">
                       <strong>{user.name}</strong>
-                      <span className="demo-balance">${user.starting_balance.toLocaleString()} {user.currency}</span>
+                      <span className="demo-balance">
+                        {currency === "INR"
+                          ? `₹${Math.round(user.starting_balance * conversionRate).toLocaleString("en-IN")}`
+                          : `$${user.starting_balance.toLocaleString()} ${user.currency}`}
+                      </span>
                     </div>
                     <div className="demo-desc">{user.profile_description || "Algorithmic trader"}</div>
                     <div className="demo-meta">

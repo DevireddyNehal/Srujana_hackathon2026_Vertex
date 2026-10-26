@@ -15,12 +15,16 @@ interface UserStatisticsWidgetProps {
   currentUser: UserProfile | null;
   authToken?: string | null;
   onOpenAuthModal?: () => void;
+  currency?: "INR" | "USD";
+  conversionRate?: number;
 }
 
 export function UserStatisticsWidget({
   currentUser,
   authToken,
   onOpenAuthModal,
+  currency = "INR",
+  conversionRate = 83.5,
 }: UserStatisticsWidgetProps) {
   const [rangePreset, setRangePreset] = useState("all");
   const [sessionFilter, setSessionFilter] = useState("all");
@@ -111,10 +115,28 @@ export function UserStatisticsWidget({
   }, [dailyPnL]);
 
   // Format Helpers
-  const fmtCurrency = (val?: number | null) => {
+  const fmtCurrency = (val?: number | null, forceSign = true) => {
     if (val === null || val === undefined) return "--";
-    const sign = val > 0 ? "+" : "";
-    return `${sign}$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const isINR = currency === "INR";
+    const rate = isINR ? conversionRate : 1;
+    const converted = val * rate;
+    const sign = converted > 0 ? (forceSign ? "+" : "") : converted < 0 ? "-" : "";
+    const absVal = Math.abs(converted);
+    if (isINR) {
+      return `${sign}₹${absVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    return `${sign}$${absVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const formatBalance = (val?: number | null) => {
+    if (val === null || val === undefined) return "--";
+    const isINR = currency === "INR";
+    const rate = isINR ? conversionRate : 1;
+    const converted = Math.round(val * rate);
+    if (isINR) {
+      return `₹${converted.toLocaleString("en-IN")}`;
+    }
+    return `$${converted.toLocaleString("en-US")}`;
   };
 
   const fmtPct = (val?: number | null) => {
@@ -137,8 +159,8 @@ export function UserStatisticsWidget({
 
         <div className="stats-header-actions">
           <button className="btn-user-badge" onClick={onOpenAuthModal}>
-            👤 {currentUser?.name || "Switch Profile"} ({currentUser?.currency || "USD"}{" "}
-            ${currentUser?.starting_balance?.toLocaleString() ?? "50,000"})
+            👤 {currentUser?.name || "Switch Profile"} ({currency || "INR"}{" "}
+            {formatBalance(currentUser?.starting_balance ?? 50000)})
           </button>
           <button className="btn-refresh-stats" onClick={loadStats} title="Refresh analytics" disabled={loading}>
             {loading ? "⏳ Calculating..." : "🔄 Refresh"}
@@ -233,7 +255,7 @@ export function UserStatisticsWidget({
             {metrics?.max_drawdown_pct ? `${metrics.max_drawdown_pct.toFixed(2)}%` : "0.00%"}
           </div>
           <div className="kpi-sub-text">
-            Peak-to-trough: -${metrics?.max_drawdown_currency?.toLocaleString() || "0"}
+            Peak-to-trough: -{fmtCurrency(metrics?.max_drawdown_currency, false)}
           </div>
         </div>
 
@@ -264,7 +286,7 @@ export function UserStatisticsWidget({
         <div className="kpi-stat-card">
           <div className="kpi-lbl">Friction & Trading Costs</div>
           <div className="kpi-val negative">
-            -${metrics?.total_trading_costs?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+            -{fmtCurrency(metrics?.total_trading_costs, false)}
           </div>
           <div className="kpi-sub-text">
             Commissions, execution fees, & swaps
@@ -392,7 +414,7 @@ export function UserStatisticsWidget({
                           x: pt.x,
                           y: pt.y,
                           label: pt.p.date,
-                          value: `P&L: ${(pt.p.net_pnl ?? 0) >= 0 ? "+" : ""}${(pt.p.net_pnl ?? 0).toFixed(2)} · Cumulative: $${pt.cum.toFixed(2)}`,
+                          value: `P&L: ${fmtCurrency(pt.p.net_pnl, true)} · Cumulative: ${fmtCurrency(pt.cum, false)}`,
                         })
                       }
                       onMouseLeave={() => setHoveredPoint(null)}
@@ -439,7 +461,7 @@ export function UserStatisticsWidget({
                     <div
                       key={idx}
                       className="day-bar-column"
-                      title={`${day.date}: ${isPositive ? "+" : ""}$${day.net_pnl.toFixed(2)} (${day.closed_trades} trades)`}
+                      title={`${day.date}: ${fmtCurrency(day.net_pnl, true)} (${day.closed_trades} trades)`}
                     >
                       <div className="bar-track">
                         {!isZero && (
@@ -529,8 +551,8 @@ export function UserStatisticsWidget({
                         </div>
                       </div>
                     </td>
-                    <td className="cell-num positive">${(item.gross_profit ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td className="cell-num negative">-${(item.gross_loss ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td className="cell-num positive">{fmtCurrency(item.gross_profit, false)}</td>
+                    <td className="cell-num negative">-{fmtCurrency(item.gross_loss, false)}</td>
                     <td className={`cell-num ${(item.net_pnl ?? 0) >= 0 ? "positive" : "negative"}`}>
                       <strong>{fmtCurrency(item.net_pnl)}</strong>
                     </td>

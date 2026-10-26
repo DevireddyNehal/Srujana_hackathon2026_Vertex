@@ -14,6 +14,8 @@ interface TradingJournalWidgetProps {
   currentUser: UserProfile | null;
   authToken?: string | null;
   onOpenAuthModal?: () => void;
+  currency?: "INR" | "USD";
+  conversionRate?: number;
 }
 
 function toLocalISOString(date: Date = new Date()): string {
@@ -30,7 +32,38 @@ export function TradingJournalWidget({
   currentUser,
   authToken,
   onOpenAuthModal,
+  currency = "INR",
+  conversionRate = 83.5,
 }: TradingJournalWidgetProps) {
+  const formatMoney = useCallback(
+    (val: number | null | undefined, showSign = false) => {
+      if (val === null || val === undefined) return "--";
+      const isINR = currency === "INR";
+      const rate = isINR ? conversionRate : 1;
+      const converted = val * rate;
+      const sign = showSign && converted >= 0 ? "+" : converted < 0 ? "-" : "";
+      const absVal = Math.abs(converted);
+      if (isINR) {
+        return `${sign}₹${absVal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+      return `${sign}$${absVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    },
+    [currency, conversionRate]
+  );
+
+  const formatBalance = useCallback(
+    (val: number | null | undefined) => {
+      if (val === null || val === undefined) return "--";
+      const isINR = currency === "INR";
+      const rate = isINR ? conversionRate : 1;
+      const converted = Math.round(val * rate);
+      if (isINR) {
+        return `₹${converted.toLocaleString("en-IN")}`;
+      }
+      return `$${converted.toLocaleString("en-US")}`;
+    },
+    [currency, conversionRate]
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState<PaginatedTrades>({
     items: [],
@@ -305,8 +338,8 @@ export function TradingJournalWidget({
 
         <div className="header-actions">
           <button className="btn-secondary-action" onClick={onOpenAuthModal}>
-            👤 {currentUser?.name || "Switch User"} ({currentUser?.currency || "USD"}{" "}
-            ${currentUser?.starting_balance?.toLocaleString() ?? "50,000"})
+            👤 {currentUser?.name || "Switch User"} ({currency || "INR"}{" "}
+            {formatBalance(currentUser?.starting_balance ?? 50000)})
           </button>
           <button className="btn-primary-action btn-log-trade" onClick={handleOpenAddModal}>
             + Log New Trade
@@ -341,7 +374,7 @@ export function TradingJournalWidget({
         <div className="kpi-mini-card">
           <span className="lbl">Page Net P&L</span>
           <span className={`val ${pageNetPnL >= 0 ? "positive" : "negative"}`}>
-            {pageNetPnL >= 0 ? "+" : ""}${(pageNetPnL ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(pageNetPnL, true)}
           </span>
         </div>
         <div className="kpi-mini-card">
@@ -490,7 +523,7 @@ export function TradingJournalWidget({
                     <td className={`cell-num cell-pnl ${isWin ? "positive" : isLoss ? "negative" : ""}`}>
                       {trade.net_pnl !== null ? (
                         <>
-                          {trade.net_pnl >= 0 ? "+" : ""}${trade.net_pnl.toFixed(2)}
+                          {formatMoney(trade.net_pnl, true)}
                         </>
                       ) : (
                         "--"
@@ -822,7 +855,7 @@ export function TradingJournalWidget({
                   <p>
                     {reviewTrade.symbol} {reviewTrade.direction} · Net P&L:{" "}
                     <span className={reviewTrade.net_pnl >= 0 ? "positive" : "negative"}>
-                      {reviewTrade.net_pnl >= 0 ? "+" : ""}${reviewTrade.net_pnl.toFixed(2)}
+                      {formatMoney(reviewTrade.net_pnl, true)}
                     </span>
                   </p>
                 </div>
