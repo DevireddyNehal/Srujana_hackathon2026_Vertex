@@ -34,10 +34,10 @@ A portfolio-risk analysis prototype built with **React**, **TypeScript**, **Vite
 It addresses the fundamental challenge of hidden portfolio risk: allowing investors to look beyond static returns and evaluate how multi-factor market crashes, interest-rate shifts, sector disruptions, currency shocks, and cross-asset contagion affect their holdings in real time.
 
 ### About the Team
-* **Nehal Devireddy** — Project Lead & Quantitative Architecture (`backend/engine/quant.py`, `backend/engine/contagion.py`, `backend/engine/ai_agent.py`)
-* **Zama** — Backend & API Engineering (`backend/main.py`, `backend/database.py`, mock fixtures)
-* **Ahmad** — Frontend Lead (React/TypeScript application shell, page routing, and state orchestration)
-* **Shyam** — UI Widgets & Presentation (Correlation heatmap, scenario shock controls, historical vs. hypothetical projection charts)
+* **Devireddy Nehal** — Project Lead & Quantitative Architecture (`backend/engine/quant.py`, `backend/engine/contagion.py`, `backend/engine/ai_agent.py`)
+* **Mohammed Zama** — Backend & API Engineering (`backend/main.py`, `backend/database.py`, mock fixtures)
+* **MD Ahmad** — Frontend Lead (React/TypeScript application shell, page routing, and state orchestration)
+* **Shyam Sundar** — UI Widgets & Presentation (Correlation heatmap, scenario shock controls, historical vs. hypothetical projection charts)
 
 ### Official Project Documentation
 * 📄 **Jury Evaluation Report (PDF):** [`docs/Investment_Portfolio_Risk_Scenario_Analysis_Jury_Report.pdf`](./docs/Investment_Portfolio_Risk_Scenario_Analysis_Jury_Report.pdf)

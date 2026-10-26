@@ -3780,7 +3780,7 @@ export default function Dashboard() {
         </div>
         <footer className="app-footer">
           <span><span className="footer-mark">V</span> VERTEX <span>PORTFOLIO RISK LAB</span></span>
-          <p>Srujana Tech Fest 2026 · Problem F-06 · Built by Nehal, Zama, Ahmad &amp; Shyam</p>
+          <p>Srujana Tech Fest 2026 · Problem F-06 · Built by Devireddy Nehal, Mohammed Zama, MD Ahmad &amp; Shyam Sundar</p>
           <div style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
             <a
               href="/Investment_Portfolio_Risk_Scenario_Analysis_Jury_Report.pdf"
