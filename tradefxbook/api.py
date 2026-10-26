@@ -8,7 +8,7 @@ from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, Query, Response, status, UploadFile, File
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Query, Response, status, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -165,14 +165,16 @@ def list_trades(
     sort_order: str = Query("desc", pattern="^(asc|desc|ASC|DESC)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=500),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     List trades with database-level pagination, sorting, and multi-field filtering.
-    Strictly isolated: returns only the current user's trades.
+    Strictly isolated: returns only the current user's and client device's trades.
     """
     result = list_trades_paginated(
         user_id=current_user["id"],
+        device_id=x_device_id,
         date_from=date_from,
         date_to=date_to,
         symbol=symbol,
@@ -193,27 +195,29 @@ def list_trades(
 @router.post("/trades", response_model=TradeOut, status_code=status.HTTP_201_CREATED)
 def create_new_trade(
     trade_in: TradeCreate,
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
-    Creates a new journal trade entry.
+    Creates a new journal trade entry scoped to the user and creating device.
     Calculates gross P&L, commissions, fees, signed swap, and net realized P&L authoritatively.
     """
     trade_dict = trade_in.model_dump()
-    created = create_trade(user_id=current_user["id"], trade_data=trade_dict)
+    created = create_trade(user_id=current_user["id"], trade_data=trade_dict, device_id=x_device_id)
     return created
 
 
 @router.get("/trades/{trade_id}", response_model=TradeOut)
 def get_trade_details(
     trade_id: str,
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Retrieves full details of an individual trade.
-    Enforces ownership: returns 404 if not found or belongs to another user.
+    Enforces ownership: returns 404 if not found or belongs to another user/device.
     """
-    trade = get_trade_by_id(trade_id=trade_id, user_id=current_user["id"])
+    trade = get_trade_by_id(trade_id=trade_id, user_id=current_user["id"], device_id=x_device_id)
     if not trade:
         raise HTTPException(
             status_code=404,
@@ -226,6 +230,7 @@ def get_trade_details(
 def update_trade_details(
     trade_id: str,
     update_in: TradeUpdate,
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
@@ -238,6 +243,7 @@ def update_trade_details(
             trade_id=trade_id,
             user_id=current_user["id"],
             update_data=update_data,
+            device_id=x_device_id,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -255,13 +261,14 @@ def update_trade_details(
 @router.delete("/trades/{trade_id}")
 def delete_trade_record(
     trade_id: str,
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Deletes a trade record.
     Enforces ownership: returns 404 if not found or unauthorized.
     """
-    success = delete_trade(trade_id=trade_id, user_id=current_user["id"])
+    success = delete_trade(trade_id=trade_id, user_id=current_user["id"], device_id=x_device_id)
     if not success:
         raise HTTPException(
             status_code=404,
@@ -281,14 +288,16 @@ def export_trades_csv(
     strategy: Optional[str] = Query(None),
     session: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Exports filtered trade history to CSV.
-    Guarantees user isolation: never contains another user's trades.
+    Guarantees user and device isolation: never contains another user's or device's trades.
     """
     csv_content = export_trades_to_csv(
         user_id=current_user["id"],
+        device_id=x_device_id,
         date_from=date_from,
         date_to=date_to,
         symbol=symbol,
@@ -310,11 +319,12 @@ def export_trades_csv(
 @router.post("/trades/import/csv")
 async def import_trades_csv(
     file: UploadFile = File(...),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Imports trades from an uploaded CSV file.
-    Enforces user isolation: all imported trades are assigned exclusively to current_user.
+    Enforces user isolation: all imported trades are assigned exclusively to current_user and current device.
     """
     content = await file.read()
     try:
@@ -323,7 +333,7 @@ async def import_trades_csv(
         csv_text = content.decode("latin-1")
 
     try:
-        result = import_trades_from_csv(user_id=current_user["id"], csv_text=csv_text)
+        result = import_trades_from_csv(user_id=current_user["id"], csv_text=csv_text, device_id=x_device_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result
@@ -333,13 +343,14 @@ async def import_trades_csv(
 @router.get("/trades/{trade_id}/review")
 def get_trade_review(
     trade_id: str,
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Returns automated discipline and execution review for an individual trade.
     Enforces user isolation: cannot review another trader's trade.
     """
-    trade = get_trade_by_id(trade_id=trade_id, user_id=current_user["id"])
+    trade = get_trade_by_id(trade_id=trade_id, user_id=current_user["id"], device_id=x_device_id)
     if not trade:
         raise HTTPException(
             status_code=404,
@@ -457,11 +468,12 @@ def get_analytics_overview(
     session: Optional[str] = Query(None),
     direction: Optional[str] = Query(None),
     outcome: Optional[str] = Query(None),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Computes all 22 required trading performance metrics + secondary statistics
-    authoritatively strictly from the current user's closed trades.
+    authoritatively strictly from the current user's and client device's closed trades.
     """
     resolved_from, resolved_to = _resolve_date_range(
         range_preset, date_from, date_to, current_user.get("timezone", "UTC")
@@ -473,6 +485,7 @@ def get_analytics_overview(
         user_name=current_user["name"],
         account_currency=current_user.get("currency", "USD"),
         timezone_str=current_user.get("timezone", "UTC"),
+        device_id=x_device_id,
         date_from=resolved_from,
         date_to=resolved_to,
         symbol=symbol,
@@ -490,6 +503,7 @@ def get_daily_pnl(
     range_preset: Optional[str] = Query("30d", description="7d, 30d, 90d, ytd, 1y, all, custom"),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
@@ -504,9 +518,9 @@ def get_daily_pnl(
     if resolved_from and resolved_to:
         d_start = (date.fromisoformat(resolved_from) - timedelta(days=2)).isoformat()
         d_end = (date.fromisoformat(resolved_to) + timedelta(days=2)).isoformat()
-        trades = get_user_closed_trades(user_id=current_user["id"], date_from=d_start, date_to=d_end)
+        trades = get_user_closed_trades(user_id=current_user["id"], device_id=x_device_id, date_from=d_start, date_to=d_end)
     else:
-        trades = get_user_closed_trades(user_id=current_user["id"])
+        trades = get_user_closed_trades(user_id=current_user["id"], device_id=x_device_id)
         if trades:
             resolved_from = trades[0]["exit_time"][:10]
             resolved_to = trades[-1]["exit_time"][:10]
@@ -528,6 +542,7 @@ def get_equity_curve(
     range_preset: Optional[str] = Query("all"),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
@@ -539,6 +554,7 @@ def get_equity_curve(
 
     trades = get_user_closed_trades(
         user_id=current_user["id"],
+        device_id=x_device_id,
         date_from=resolved_from,
         date_to=resolved_to,
     )
@@ -594,6 +610,7 @@ def get_breakdowns(
     dimension: Optional[str] = Query(None, pattern="^(overall|strategy|session|symbol|direction|asset_class)$"),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    x_device_id: Optional[str] = Header(None, alias="X-Device-Id"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
@@ -603,6 +620,7 @@ def get_breakdowns(
     return get_analytics_breakdown(
         user_id=current_user["id"],
         group_by_field=field,
+        device_id=x_device_id,
         date_from=date_from,
         date_to=date_to,
     )

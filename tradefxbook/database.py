@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS trades (
     plan_followed INTEGER DEFAULT 1,
     mistakes_or_lessons TEXT,
     seed_batch TEXT,
+    device_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -76,6 +77,8 @@ CREATE INDEX IF NOT EXISTS idx_trades_user_strategy ON trades(user_id, strategy_
 CREATE INDEX IF NOT EXISTS idx_trades_user_session ON trades(user_id, trading_session);
 CREATE INDEX IF NOT EXISTS idx_trades_is_demo ON trades(is_demo);
 CREATE INDEX IF NOT EXISTS idx_trades_seed_batch ON trades(seed_batch);
+CREATE INDEX IF NOT EXISTS idx_trades_device_id ON trades(device_id);
+CREATE INDEX IF NOT EXISTS idx_trades_user_device ON trades(user_id, device_id);
 CREATE INDEX IF NOT EXISTS idx_trades_user_status_net_pnl ON trades(user_id, status, net_pnl);
 """
 
@@ -119,4 +122,13 @@ def init_db(db_path: Optional[Path] = None) -> None:
     Initializes database schema and ensures all indexes exist safely without dropping data.
     """
     with db_session(db_path) as conn:
+        # Ensure backwards-compatible column migration for pre-existing databases before index creation
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='trades'")
+        if cursor.fetchone():
+            col_cursor = conn.execute("PRAGMA table_info(trades)")
+            columns = [row["name"] for row in col_cursor.fetchall()]
+            if "device_id" not in columns:
+                conn.execute("ALTER TABLE trades ADD COLUMN device_id TEXT;")
         conn.executescript(SCHEMA_SQL)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_device_id ON trades(device_id);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_user_device ON trades(user_id, device_id);")

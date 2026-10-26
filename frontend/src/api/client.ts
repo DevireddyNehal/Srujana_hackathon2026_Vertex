@@ -44,6 +44,18 @@ export interface Portfolio {
   assets: PortfolioAsset[];
 }
 
+export function getDeviceId(): string {
+  if (typeof localStorage === "undefined") {
+    return "dev_client_ssr";
+  }
+  let deviceId = localStorage.getItem("vertex_device_id");
+  if (!deviceId) {
+    deviceId = `dev_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    localStorage.setItem("vertex_device_id", deviceId);
+  }
+  return deviceId;
+}
+
 async function requestJson<T>(
   path: string,
   init?: RequestInit,
@@ -56,7 +68,15 @@ async function requestJson<T>(
 
   try {
     const signal = init?.signal ?? timeoutController.signal;
-    response = await fetch(`${API_BASE_URL}${path}`, { ...init, signal });
+    const requestHeaders = new Headers(init?.headers);
+    if (!requestHeaders.has("X-Device-Id")) {
+      requestHeaders.set("X-Device-Id", getDeviceId());
+    }
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: requestHeaders,
+      signal,
+    });
   } catch (error) {
     const detail = error instanceof Error ? ` ${error.message}` : "";
     throw new Error(`Cannot reach the risk engine at ${API_BASE_URL}.${detail}`);
@@ -130,12 +150,13 @@ import type {
   BreakdownItem,
 } from "../types/trading";
 
-function getAuthHeaders(userId?: string, token?: string): Record<string, string> {
+export function getAuthHeaders(userId?: string, token?: string): Record<string, string> {
   const headers: Record<string, string> = {};
   const activeUser = userId || (typeof localStorage !== "undefined" ? localStorage.getItem("vertex_active_user_id") : null);
   const activeToken = token || (typeof localStorage !== "undefined" ? localStorage.getItem("vertex_auth_token") : null);
   if (activeUser) headers["X-User-Id"] = activeUser;
   if (activeToken) headers["Authorization"] = `Bearer ${activeToken}`;
+  headers["X-Device-Id"] = getDeviceId();
   return headers;
 }
 

@@ -96,22 +96,40 @@ def create_user(
 
 
 
-def get_trade_by_id(trade_id: str, user_id: str, db_path: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+def get_trade_by_id(
+    trade_id: str,
+    user_id: str,
+    device_id: Optional[str] = None,
+    db_path: Optional[Any] = None,
+) -> Optional[Dict[str, Any]]:
     """
-    Retrieves an individual trade by ID strictly enforcing user ownership.
-    Returns None if trade does not exist or belongs to another user.
+    Retrieves an individual trade by ID strictly enforcing user ownership and client device isolation.
+    Returns None if trade does not exist or belongs to another user/device.
     """
     with db_session(db_path) as conn:
         row = conn.execute(
             "SELECT * FROM trades WHERE id = ? AND user_id = ?",
             (trade_id, user_id),
         ).fetchone()
-        return row_to_dict(row) if row else None
+        if not row:
+            return None
+        trade = row_to_dict(row)
+        # Check device isolation for demo users
+        is_demo_trader = bool(trade.get("is_demo") or str(user_id).startswith("demo_") or user_id == "demo")
+        if is_demo_trader and trade.get("seed_batch") != "demo_seed_v1_deterministic":
+            trade_dev_id = trade.get("device_id")
+            if trade_dev_id:
+                if device_id and trade_dev_id != device_id:
+                    return None
+                elif not device_id:
+                    return None
+        return trade
 
 
 def create_trade(
     user_id: str,
     trade_data: Dict[str, Any],
+    device_id: Optional[str] = None,
     db_path: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
@@ -124,6 +142,7 @@ def create_trade(
 
     trade_id = trade_data.get("id") or f"trd_{uuid.uuid4().hex[:12]}"
     now_iso = datetime.now(dt_timezone.utc).isoformat()
+    dev_id = device_id or trade_data.get("device_id")
 
     if trade_data.get("status") == "CLOSED" and trade_data.get("exit_time") and trade_data.get("entry_time"):
         try:
@@ -173,7 +192,7 @@ def create_trade(
                 planned_risk_amount, risk_pct_balance, planned_rr_ratio, realized_r_multiple,
                 gross_pnl, commission, other_fees, signed_swap_adjustment, net_pnl,
                 strategy_or_setup, trading_session, tags, notes, emotional_state,
-                plan_followed, mistakes_or_lessons, seed_batch, created_at, updated_at
+                plan_followed, mistakes_or_lessons, seed_batch, device_id, created_at, updated_at
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
@@ -181,7 +200,7 @@ def create_trade(
                 ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -218,25 +237,27 @@ def create_trade(
                 1 if trade_data.get("plan_followed", True) else 0,
                 trade_data.get("mistakes_or_lessons", ""),
                 trade_data.get("seed_batch"),
+                dev_id,
                 trade_data.get("created_at", now_iso),
                 now_iso,
             ),
         )
 
-    return get_trade_by_id(trade_id, user_id, db_path)  # type: ignore
+    return get_trade_by_id(trade_id, user_id, device_id=dev_id, db_path=db_path)  # type: ignore
 
 
 def update_trade(
     trade_id: str,
     user_id: str,
     update_data: Dict[str, Any],
+    device_id: Optional[str] = None,
     db_path: Optional[Any] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Updates an existing trade with recalculated financial metrics if relevant fields change.
-    Strictly isolated: returns None if trade belongs to another user.
+    Strictly isolated: returns None if trade belongs to another user or device.
     """
-    existing = get_trade_by_id(trade_id, user_id, db_path)
+    existing = get_trade_by_id(trade_id, user_id, device_id=device_id, db_path=db_path)
     if not existing:
         return None
 
@@ -337,14 +358,24 @@ def update_trade(
             ),
         )
 
-    return get_trade_by_id(trade_id, user_id, db_path)
+    return get_trade_by_id(trade_id, user_id, device_id=device_id, db_path=db_path)
 
 
-def delete_trade(trade_id: str, user_id: str, db_path: Optional[Any] = None) -> bool:
+def delete_trade(
+    trade_id: str,
+    user_id: str,
+    device_id: Optional[str] = None,
+    db_path: Optional[Any] = None,
+) -> bool:
     """
-    Deletes a trade by ID strictly enforcing user ownership.
+    Deletes a trade by ID strictly enforcing user ownership and device isolation.
     Returns True if deleted, False if not found or unauthorized.
     """
+    existing = get_trade_by_id(trade_id, user_id, device_id=device_id, db_path=db_path)
+    if not existing:
+        return False
+    if existing.get("seed_batch") == "demo_seed_v1_deterministic":
+        return False  # Protected read-only baseline trade
     with db_session(db_path) as conn:
         cursor = conn.execute(
             "DELETE FROM trades WHERE id = ? AND user_id = ?",
@@ -353,8 +384,10 @@ def delete_trade(trade_id: str, user_id: str, db_path: Optional[Any] = None) -> 
         return cursor.rowcount > 0
 
 
+
 def _build_trade_filter_sql(
     user_id: str,
+    device_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     symbol: Optional[str] = None,
@@ -365,9 +398,17 @@ def _build_trade_filter_sql(
     session: Optional[str] = None,
     search: Optional[str] = None,
 ) -> Tuple[str, List[Any]]:
-    """Builds parameterized SQL WHERE clause enforcing user isolation."""
+    """Builds parameterized SQL WHERE clause enforcing user isolation and device-scoped demo isolation."""
     conditions = ["user_id = ?"]
     params: List[Any] = [user_id]
+
+    is_demo_trader = str(user_id).startswith("demo_") or user_id == "demo"
+    if is_demo_trader:
+        if device_id:
+            conditions.append("(seed_batch = 'demo_seed_v1_deterministic' OR (device_id IS NOT NULL AND device_id = ?))")
+            params.append(device_id)
+        else:
+            conditions.append("(seed_batch = 'demo_seed_v1_deterministic' OR device_id IS NULL)")
 
     if date_from:
         conditions.append("exit_time >= ?")
@@ -411,6 +452,7 @@ def _build_trade_filter_sql(
 
 def list_trades_paginated(
     user_id: str,
+    device_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     symbol: Optional[str] = None,
@@ -455,6 +497,7 @@ def list_trades_paginated(
 
     where_sql, params = _build_trade_filter_sql(
         user_id=user_id,
+        device_id=device_id,
         date_from=date_from,
         date_to=date_to,
         symbol=symbol,
@@ -496,6 +539,7 @@ def list_trades_paginated(
 
 def export_trades_to_csv(
     user_id: str,
+    device_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     symbol: Optional[str] = None,
@@ -508,10 +552,11 @@ def export_trades_to_csv(
     db_path: Optional[Any] = None,
 ) -> str:
     """
-    Exports filtered trade history to CSV strictly for the requested user.
+    Exports filtered trade history to CSV strictly for the requested user and device.
     """
     where_sql, params = _build_trade_filter_sql(
         user_id=user_id,
+        device_id=device_id,
         date_from=date_from,
         date_to=date_to,
         symbol=symbol,
@@ -581,11 +626,12 @@ def export_trades_to_csv(
 def import_trades_from_csv(
     user_id: str,
     csv_text: str,
+    device_id: Optional[str] = None,
     db_path: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Imports trades from a CSV string with validation, formula injection protection,
-    and strict user isolation.
+    and strict user and device isolation.
     """
     user = get_user_by_id(user_id, db_path)
     if not user:
@@ -659,7 +705,7 @@ def import_trades_from_csv(
                 "emotional_state": clean_row.get("emotional_state", "Disciplined"),
                 "plan_followed": clean_row.get("plan_followed", "1") in ("1", "true", "True", True),
             }
-            create_trade(user_id=user_id, trade_data=trade_data, db_path=db_path)
+            create_trade(user_id=user_id, trade_data=trade_data, device_id=device_id, db_path=db_path)
             imported += 1
         except Exception as e:
             errors.append(f"Row {idx}: {str(e)}")
@@ -676,6 +722,7 @@ def import_trades_from_csv(
 
 def get_user_closed_trades(
     user_id: str,
+    device_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     symbol: Optional[str] = None,
@@ -686,10 +733,11 @@ def get_user_closed_trades(
     db_path: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Retrieves all closed trades for analytics computation strictly for the specified user.
+    Retrieves all closed trades for analytics computation strictly for the specified user and device.
     """
     where_sql, params = _build_trade_filter_sql(
         user_id=user_id,
+        device_id=device_id,
         date_from=date_from,
         date_to=date_to,
         symbol=symbol,
@@ -710,12 +758,13 @@ def get_user_closed_trades(
 def get_analytics_breakdown(
     user_id: str,
     group_by_field: str,  # overall, symbol, strategy_or_setup, trading_session, direction, outcome
+    device_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     db_path: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Fast database-level aggregated breakdown grouped by category or overall portfolio.
+    Fast database-level aggregated breakdown grouped by category or overall portfolio with device isolation.
     """
     allowed_groups = {
         "overall": "overall",
@@ -729,6 +778,7 @@ def get_analytics_breakdown(
 
     where_sql, params = _build_trade_filter_sql(
         user_id=user_id,
+        device_id=device_id,
         date_from=date_from,
         date_to=date_to,
         status="CLOSED",
@@ -810,6 +860,7 @@ def compute_user_analytics_db(
     user_name: str = "Demo Trader",
     account_currency: str = "USD",
     timezone_str: str = "UTC",
+    device_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     symbol: Optional[str] = None,
@@ -826,6 +877,7 @@ def compute_user_analytics_db(
     """
     where_sql, params = _build_trade_filter_sql(
         user_id=user_id,
+        device_id=device_id,
         date_from=date_from,
         date_to=date_to,
         symbol=symbol,

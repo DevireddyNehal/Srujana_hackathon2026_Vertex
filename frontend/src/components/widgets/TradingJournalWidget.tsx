@@ -8,6 +8,7 @@ import {
   deleteJournalTrade,
   getTradeReview,
   importJournalTradesCsv,
+  getDeviceId,
 } from "../../api/client";
 
 interface TradingJournalWidgetProps {
@@ -304,6 +305,7 @@ export function TradingJournalWidget({
     fetch(url, {
       headers: {
         "X-User-Id": currentUser.id,
+        "X-Device-Id": getDeviceId(),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     })
