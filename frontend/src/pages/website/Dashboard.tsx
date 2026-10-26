@@ -22,6 +22,7 @@ import {
   classCorrelations,
   portfolios,
   scenarios,
+  demoTraderMonthlyReturns,
   type Holding,
   type Portfolio,
   type Scenario,
@@ -37,6 +38,9 @@ import {
   TradingJournalWidget,
   UserStatisticsWidget,
   AuthModal,
+  CatalystStressStation,
+  DEFAULT_NEWS_ARTICLES,
+  type NewsArticle,
 } from "../../components/widgets";
 import "../../components/widgets/TradingWidgets.css";
 import type { UserProfile } from "../../types/trading";
@@ -266,6 +270,77 @@ function createAlternativeWeights(portfolio: Portfolio): number[] {
     const val = classTotal > 0 ? (desiredTotal * holding.weight) / classTotal : 0;
     return Math.round(val * 10) / 10;
   });
+}
+
+function buildCatalystScenario(article: NewsArticle): Scenario {
+  let marketPct = -5;
+  let rateBps = 0;
+  let technologyPct = 0;
+  let fxPct = 0;
+
+  const headlineLower = article.headline.toLowerCase();
+  const summaryLower = article.summary.toLowerCase();
+  const text = `${headlineLower} ${summaryLower}`;
+
+  if (
+    article.suggestedScenarioId === "technology" ||
+    text.includes("tech") ||
+    text.includes("cloud") ||
+    text.includes("tcs") ||
+    text.includes("infosys")
+  ) {
+    if (article.sentiment === "bullish") {
+      technologyPct = 12;
+      marketPct = 3;
+    } else {
+      technologyPct = -25;
+      marketPct = -5;
+    }
+  } else if (
+    article.suggestedScenarioId === "rates" ||
+    text.includes("repo rate") ||
+    text.includes("g-sec") ||
+    text.includes("yield") ||
+    text.includes("treasury")
+  ) {
+    if (article.sentiment === "bearish" || text.includes("sell-off") || text.includes("surge") || text.includes("rebound")) {
+      rateBps = 150;
+      marketPct = -3;
+    } else {
+      rateBps = 50;
+      marketPct = 1;
+    }
+  } else if (
+    article.suggestedScenarioId === "fx" ||
+    text.includes("rupee") ||
+    text.includes("usd") ||
+    text.includes("forex")
+  ) {
+    fxPct = 15;
+    marketPct = -4;
+    rateBps = 50;
+  } else {
+    if (article.sentiment === "bullish" || text.includes("gold")) {
+      marketPct = -8;
+      rateBps = 50;
+    } else {
+      marketPct = -28;
+      rateBps = 100;
+      technologyPct = -8;
+    }
+  }
+
+  const shortLabel = article.headline.length > 36 ? `${article.headline.slice(0, 36)}…` : article.headline;
+
+  return {
+    id: `catalyst-${article.id}`,
+    label: `⚡ Catalyst: ${shortLabel}`,
+    description: `Narrative Shock: ${article.category || "Macro"} (${article.sentiment?.toUpperCase() || "CATALYST"})`,
+    marketPct,
+    rateBps,
+    technologyPct,
+    fxPct,
+  };
 }
 
 function pathFor(values: number[], width: number, height: number, min: number, max: number) {
@@ -1184,12 +1259,12 @@ function RecoveryAnalysisCard({
         </div>
 
         <div style={{ background: "var(--canvas, rgba(0,0,0,0.02))", border: "1px solid var(--line)", borderRadius: "8px", padding: "10px 12px" }}>
-          <div style={{ fontSize: "10px", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>Recovery Probability (3-Yr)</div>
+          <div style={{ fontSize: "10px", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>Path Resilience Index (3-Yr)</div>
           <div style={{ fontSize: "18px", fontWeight: 700, color: "#2EAF7D", marginTop: "2px" }}>
             {formatPercent(hedged.probRecoveringWithinHorizonPct)}
           </div>
           <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
-            {probBoostPct > 0 ? `+${probBoostPct}% higher confidence` : "High confidence"}
+            {probBoostPct > 0 ? `+${probBoostPct}% modeled resilience gain` : "Statistical path resilience"}
           </div>
         </div>
 
@@ -1653,6 +1728,10 @@ function RangeControl({
   );
 }
 
+function requestErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function DiagnosticsPanel({
   portfolio,
   weights,
@@ -1665,11 +1744,15 @@ function DiagnosticsPanel({
   lossLimit,
   onLossLimitChange,
   scenarioResult,
+  hedgedScenarioResult,
   currency,
   maxTurnoverPct,
   onMaxTurnoverPctChange,
   hedgePreference,
   onHedgePreferenceChange,
+  riskSummaryPayload,
+  onApplyRebalance,
+  rebalanceAdopted,
 }: {
   portfolio: Portfolio;
   weights: number[];
@@ -1682,11 +1765,15 @@ function DiagnosticsPanel({
   lossLimit: number;
   onLossLimitChange: (value: number) => void;
   scenarioResult: ReturnType<typeof calculateScenario> | null;
+  hedgedScenarioResult?: HedgedScenarioResult | null;
   currency: Currency;
   maxTurnoverPct?: number;
   onMaxTurnoverPctChange?: (value: number) => void;
   hedgePreference?: "multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive";
   onHedgePreferenceChange?: (value: "multi_asset" | "gold_focus" | "liquid_debt_focus" | "equity_defensive") => void;
+  riskSummaryPayload?: ScenarioRiskRequest;
+  onApplyRebalance?: (proposedAssets: Array<{ ticker: string; sector?: string; weight_pct: number; amount_inr?: number }>) => void;
+  rebalanceAdopted?: boolean;
 }) {
   const [draftRiskTolerance, setDraftRiskTolerance] = useState(riskTolerance);
   const [draftHorizon, setDraftHorizon] = useState(horizon);
@@ -1694,6 +1781,13 @@ function DiagnosticsPanel({
   const [draftLossLimit, setDraftLossLimit] = useState(lossLimit);
   const [draftMaxTurnover, setDraftMaxTurnover] = useState(maxTurnoverPct ?? 25);
   const [draftHedgePreference, setDraftHedgePreference] = useState(hedgePreference ?? "multi_asset");
+
+  // Quantitative Risk Engine API State
+  const [apiResult, setApiResult] = useState<ScenarioRiskResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasRunEngine, setHasRunEngine] = useState(false);
+
   const hasUnappliedChanges =
     draftRiskTolerance !== riskTolerance ||
     draftHorizon !== horizon ||
@@ -1714,6 +1808,21 @@ function DiagnosticsPanel({
     onHedgePreferenceChange?.(draftHedgePreference);
   };
 
+  const runQuantitativeEngine = async () => {
+    if (!riskSummaryPayload) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await analyzeScenario(riskSummaryPayload);
+      setApiResult(resp);
+      setHasRunEngine(true);
+    } catch (requestError) {
+      setError(requestErrorMessage(requestError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const liquidAssets = holdings
     .filter((h) => h.liquidity === "High" || h.assetClass === "Cash")
     .reduce((sum, h) => sum + h.marketValue, 0);
@@ -1729,8 +1838,88 @@ function DiagnosticsPanel({
     .filter((h) => h.assetClass === "Equity")
     .reduce((sum, h) => sum + h.normalizedWeight, 0);
 
+  // Quantitative Metrics Calculation (Instantaneous Local Baseline + API sync)
+  const capitalPreserved = apiResult?.ai_analysis?.alternative_portfolio?.drawdown_saved_inr !== undefined
+    ? apiResult.ai_analysis.alternative_portfolio.drawdown_saved_inr
+    : (hedgedScenarioResult?.drawdownSavedInr ?? 0);
+
+  const stressedFloor = apiResult?.summary?.stressed_value_median_inr !== undefined
+    ? apiResult.summary.stressed_value_median_inr
+    : (hedgedScenarioResult?.hedgedEndingValue ?? (scenarioResult?.endingValue ?? portfolio.marketValue));
+
+  const resilienceScore = apiResult?.summary?.diversification_score_out_of_100 !== undefined
+    ? Math.round(apiResult.summary.diversification_score_out_of_100)
+    : Math.round(Math.min(95, Math.max(48, 100 - (topSector[1] * 0.65) - (equityWeight > 70 ? 12 : 0))));
+
+  const isExpansion = scenarioResult ? scenarioResult.pnl >= 0 : false;
+
+  // Actionable Rebalance Proposals
+  const altTrades = apiResult?.ai_analysis?.alternative_portfolio?.actionable_trades;
+  const proposedAssets = apiResult?.ai_analysis?.alternative_portfolio?.proposed_assets;
+
+  // Local fallback actionable trades if API not yet called but concentration / turnover hedge is needed
+  const localFallbackTrades = useMemo(() => {
+    if (altTrades && altTrades.length > 0) return altTrades;
+    if (capitalPreserved <= 0 && isExpansion) return [];
+    const topHolding = holdings.slice().sort((a, b) => b.normalizedWeight - a.normalizedWeight)[0];
+    if (!topHolding || topHolding.normalizedWeight <= 20) return [];
+    const trimWeight = Math.min(topHolding.normalizedWeight - 15, draftMaxTurnover);
+    if (trimWeight <= 0) return [];
+    const trimAmount = (portfolio.marketValue * trimWeight) / 100;
+    const hedgeTicker = draftHedgePreference === "gold_focus" ? "GOLDBEES" : draftHedgePreference === "liquid_debt_focus" ? "LIQUIDBEES" : "GOLDBEES";
+    const hedgeName = draftHedgePreference === "gold_focus" ? "Gold ETF Buffer" : draftHedgePreference === "liquid_debt_focus" ? "Liquid Debt ETF" : "Multi-Asset Protective Hedge";
+    return [
+      {
+        action: "TRIM" as const,
+        ticker: topHolding.ticker,
+        name: topHolding.name,
+        amount_change_inr: -trimAmount,
+        weight_change_pct: -trimWeight,
+        reason: `Reduce ${topHolding.sector} concentration to limit tail shock`,
+      },
+      {
+        action: "ALLOCATE" as const,
+        ticker: hedgeTicker,
+        name: hedgeName,
+        amount_change_inr: trimAmount,
+        weight_change_pct: trimWeight,
+        reason: "Defensive buffer to preserve capital under stress",
+      },
+    ];
+  }, [altTrades, capitalPreserved, isExpansion, draftMaxTurnover, holdings, portfolio.marketValue, draftHedgePreference]);
+
+  const handleAdoptClick = () => {
+    if (!onApplyRebalance) return;
+    if (proposedAssets && proposedAssets.length > 0) {
+      onApplyRebalance(proposedAssets);
+      return;
+    }
+    // Fallback: construct proposed assets from local fallback trades
+    const topHolding = holdings.slice().sort((a, b) => b.normalizedWeight - a.normalizedWeight)[0];
+    const turnover = draftMaxTurnover;
+    const hedgeTicker = draftHedgePreference === "gold_focus" ? "GOLDBEES" : draftHedgePreference === "liquid_debt_focus" ? "LIQUIDBEES" : "GOLDBEES";
+    const newAssets = holdings.map((h) => {
+      if (topHolding && h.ticker === topHolding.ticker) {
+        return {
+          ticker: h.ticker,
+          sector: h.sector,
+          weight_pct: Math.max(0, h.normalizedWeight - turnover),
+          amount_inr: h.marketValue * ((Math.max(0, h.normalizedWeight - turnover)) / 100),
+        };
+      }
+      return { ticker: h.ticker, sector: h.sector, weight_pct: h.normalizedWeight, amount_inr: h.marketValue };
+    });
+    newAssets.push({
+      ticker: hedgeTicker,
+      sector: draftHedgePreference === "gold_focus" ? "Gold" : "Debt",
+      weight_pct: turnover,
+      amount_inr: (portfolio.marketValue * turnover) / 100,
+    });
+    onApplyRebalance(newAssets);
+  };
+
   return (
-    <section className="panel diagnostics-panel">
+    <section className="panel diagnostics-panel" id="risk-diagnostics-panel">
       <div className="panel-heading">
         <div>
           <div className="eyebrow">Objective alignment</div>
@@ -1795,6 +1984,7 @@ function DiagnosticsPanel({
           <button className="apply-settings" type="submit" disabled={!hasUnappliedChanges}>Apply settings</button>
         </div>
       </form>
+
       <div className="governance-scorecard">
         <div className="scorecard-metric">
           <span className="scorecard-label">Liquidity Coverage</span>
@@ -1821,6 +2011,7 @@ function DiagnosticsPanel({
           <small>{draftRiskTolerance} risk profile guideline</small>
         </div>
       </div>
+
       <div className="diagnostics-list" aria-live="polite">
         {warnings.length ? warnings.map((warning, index) => (
           <article className={`diagnostic-item ${warning.severity}`} key={`${warning.title}-${index}`}>
@@ -1830,10 +2021,121 @@ function DiagnosticsPanel({
         )) : (
           <article className="diagnostic-item clear-item">
             <span className="diagnostic-symbol">✓</span>
-            <div><strong>No rule-based conflicts detected</strong><p>Based on the visible risk and liquidity rules, no current threshold is crossed.</p></div>
+            <div><strong>No rule-based conflicts detected</strong><p>Based on visible risk and liquidity thresholds, allocation parameters are aligned.</p></div>
           </article>
         )}
       </div>
+
+      {/* QUANTITATIVE RISK & REBALANCE ENGINE SECTION */}
+      <div className="quant-engine-section">
+        <div className="quant-engine-header">
+          <div>
+            <div className="eyebrow">Risk Engine · Quantitative Analysis</div>
+            <h3 className="quant-engine-title">Tail Risk & Algorithmic Rebalance</h3>
+          </div>
+          {riskSummaryPayload && (
+            <button
+              type="button"
+              className={`quant-run-btn ${hasRunEngine ? "synced" : ""}`}
+              onClick={runQuantitativeEngine}
+              disabled={loading}
+            >
+              {loading ? "Analyzing Engine…" : hasRunEngine ? "✓ Engine Synchronized" : "⚡ Run Quantitative Engine"}
+            </button>
+          )}
+        </div>
+
+        {error && <div className="api-error" role="alert">{error}</div>}
+
+        <div className="quant-kpi-grid">
+          <div className="quant-kpi-card highlight-green">
+            <span className="quant-kpi-label">Modeled Capital Preserved</span>
+            <strong className="quant-kpi-value positive">
+              {capitalPreserved > 0
+                ? `+${money(capitalPreserved, currency, true)}`
+                : isExpansion
+                  ? "Expansion Active"
+                  : "Baseline Floor"}
+            </strong>
+            <small className="quant-kpi-sub">
+              {capitalPreserved > 0 ? "Preserved under stress test" : "Defensive buffer intact"}
+            </small>
+          </div>
+
+          <div className="quant-kpi-card">
+            <span className="quant-kpi-label">Stressed Capital Floor</span>
+            <strong className="quant-kpi-value">
+              {money(stressedFloor, currency, true)}
+            </strong>
+            <small className="quant-kpi-sub">Median drawdown estimate</small>
+          </div>
+
+          <div className="quant-kpi-card highlight-purple">
+            <span className="quant-kpi-label">Contagion Resilience</span>
+            <strong className="quant-kpi-value">
+              {resilienceScore} <small>/ 100</small>
+            </strong>
+            <small className="quant-kpi-sub">
+              {resilienceScore >= 80 ? "Shielded against contagion" : "Moderate tail exposure"}
+            </small>
+          </div>
+
+          <div className="quant-kpi-card">
+            <span className="quant-kpi-label">Downside VaR (95%)</span>
+            <strong className="quant-kpi-value metric-alert">
+              −{draftLossLimit}% Cap
+            </strong>
+            <small className="quant-kpi-sub">Prudential risk limit</small>
+          </div>
+        </div>
+
+        {/* ACTIONABLE REBALANCE TICKETS */}
+        <div className="quant-rebalance-box">
+          <div className="quant-rebalance-header">
+            <span className="quant-rebalance-label">Actionable Algorithmic Rebalance</span>
+            <span className="quant-rebalance-badge">{draftHedgePreference.replace("_", " ").toUpperCase()}</span>
+          </div>
+
+          {localFallbackTrades.length > 0 ? (
+            <div className="quant-trades-list">
+              {localFallbackTrades.map((trade, idx) => (
+                <div className={`quant-trade-row ${trade.action.toLowerCase()}`} key={`${trade.ticker}-${idx}`}>
+                  <span className={`trade-badge ${trade.action.toLowerCase()}`}>{trade.action}</span>
+                  <div className="trade-meta">
+                    <strong>{trade.ticker}</strong>
+                    <small>{trade.name}</small>
+                  </div>
+                  <div className="trade-delta">
+                    <span className={trade.amount_change_inr < 0 ? "negative-value" : "positive-value"}>
+                      {trade.amount_change_inr < 0 ? "-" : "+"}{money(Math.abs(trade.amount_change_inr), currency, true)}
+                    </span>
+                    <small>{trade.weight_change_pct > 0 ? `+${trade.weight_change_pct}%` : `${trade.weight_change_pct}%`}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="quant-trades-empty">
+              <span>Current portfolio meets target stress resilience. No defensive turnover required.</span>
+            </div>
+          )}
+
+          {onApplyRebalance && (
+            <button
+              type="button"
+              className={`quant-adopt-btn ${rebalanceAdopted ? "adopted" : ""}`}
+              onClick={handleAdoptClick}
+            >
+              {rebalanceAdopted ? "✓ Rebalance Active in Live Portfolio" : "✓ Adopt Rebalance as Live Portfolio"}
+            </button>
+          )}
+        </div>
+
+        <p className="quant-footnote">
+          Statistical sensitivity model based on historical asset-class covariance. Sensitivity outputs are models, not a guarantee of future capital recovery or performance.
+        </p>
+      </div>
+
       <div className="diagnostic-footnote">
         Starting cash need is a demo assumption (20% of target for high, 10% medium, 5% low liquidity); adjust it above. High-liquidity labels do not model settlement time or redemption limits.
       </div>
@@ -1960,10 +2262,6 @@ function ComparisonPanel({
       </div>
     </section>
   );
-}
-
-function requestErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function apiAssets(portfolio: Portfolio, weights: number[]) {
@@ -2636,6 +2934,22 @@ function ReverseStressPage({
   );
 }
 
+const TRADER_ARCHETYPE_MAP: Record<
+  string,
+  { portfolioId: string; risk: "Conservative" | "Moderate" | "Aggressive"; horizon: number }
+> = {
+  demo_trader_01: { portfolioId: "demo-trader-01", risk: "Conservative", horizon: 3 },
+  demo_trader_02: { portfolioId: "demo-trader-02", risk: "Aggressive", horizon: 1 },
+  demo_trader_03: { portfolioId: "demo-trader-03", risk: "Aggressive", horizon: 2 },
+  demo_trader_04: { portfolioId: "demo-trader-04", risk: "Moderate", horizon: 2 },
+  demo_trader_05: { portfolioId: "demo-trader-05", risk: "Moderate", horizon: 3 },
+  demo_trader_06: { portfolioId: "demo-trader-06", risk: "Aggressive", horizon: 1 },
+  demo_trader_07: { portfolioId: "demo-trader-07", risk: "Aggressive", horizon: 1 },
+  demo_trader_08: { portfolioId: "demo-trader-08", risk: "Conservative", horizon: 5 },
+  demo_trader_09: { portfolioId: "demo-trader-09", risk: "Moderate", horizon: 2 },
+  demo_trader_10: { portfolioId: "demo-trader-10", risk: "Moderate", horizon: 4 },
+};
+
 export default function Dashboard() {
   const [savedState] = useState(loadSavedState);
   const [activePage, setActivePage] = useState<PageName>(currentPage);
@@ -2692,7 +3006,16 @@ export default function Dashboard() {
     return "demo_token_demo_trader_01";
   });
 
-  const [portfolioId, setPortfolioId] = useState(savedState?.portfolioId ?? portfolios[0].id);
+  const [portfolioId, setPortfolioId] = useState(() => {
+    if (savedState?.portfolioId && portfolios.some((p) => p.id === savedState.portfolioId)) {
+      return savedState.portfolioId;
+    }
+    const activeUserId = typeof localStorage !== "undefined" ? localStorage.getItem("vertex_active_user_id") : null;
+    if (activeUserId && activeUserId in TRADER_ARCHETYPE_MAP) {
+      return TRADER_ARCHETYPE_MAP[activeUserId].portfolioId;
+    }
+    return "demo-trader-01";
+  });
   const basePortfolio = portfolios.find((item) => item.id === portfolioId) ?? portfolios[0];
   const [customHoldings, setCustomHoldings] = useState<Holding[] | null>(null);
   const [rebalanceAdopted, setRebalanceAdopted] = useState(false);
@@ -2709,6 +3032,7 @@ export default function Dashboard() {
     const baseTarget = basePortfolio.investorProfile.target_goal_inr || basePortfolio.marketValue;
     const baseVal = basePortfolio.marketValue || 1;
     const targetGoal = Math.round(marketValue * (baseTarget / baseVal));
+    const traderReturns = currentUser?.id ? demoTraderMonthlyReturns[currentUser.id] : undefined;
     return {
       ...basePortfolio,
       owner,
@@ -2718,6 +3042,7 @@ export default function Dashboard() {
         target_goal_inr: targetGoal,
       },
       holdings: customHoldings || basePortfolio.holdings,
+      historicalMonthlyReturns: traderReturns || basePortfolio.historicalMonthlyReturns,
     };
   }, [basePortfolio, customHoldings, traderMoneyInr, currentUser]);
 
@@ -2733,6 +3058,26 @@ export default function Dashboard() {
     }
     return savedState?.activeScenario ?? scenarios[0];
   });
+  const [activeNewsCatalyst, setActiveNewsCatalyst] = useState<NewsArticle | null>(() => {
+    try {
+      const saved = window.sessionStorage.getItem("vertex-active-catalyst");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (activeNewsCatalyst) {
+        window.sessionStorage.setItem("vertex-active-catalyst", JSON.stringify(activeNewsCatalyst));
+      } else {
+        window.sessionStorage.removeItem("vertex-active-catalyst");
+      }
+    } catch {
+      // ignore
+    }
+  }, [activeNewsCatalyst]);
   const [riskTolerance, setRiskTolerance] = useState(savedState?.riskTolerance ?? profileRisk(portfolio.investorProfile));
   const [horizon, setHorizon] = useState(savedState?.horizon ?? portfolio.investorProfile.horizon_years);
   const [liquidityNeed, setLiquidityNeed] = useState(savedState?.liquidityNeed ?? demoLiquidityNeed(portfolio));
@@ -2778,21 +3123,6 @@ export default function Dashboard() {
     setIsAuthModalOpen(true);
   }, []);
 
-  const TRADER_ARCHETYPE_MAP: Record<
-    string,
-    { portfolioId: string; risk: "Conservative" | "Moderate" | "Aggressive"; horizon: number }
-  > = {
-    demo_trader_01: { portfolioId: "conservative-retiree", risk: "Conservative", horizon: 3 },
-    demo_trader_02: { portfolioId: "tech-heavy", risk: "Aggressive", horizon: 1 },
-    demo_trader_03: { portfolioId: "tech-heavy", risk: "Aggressive", horizon: 2 },
-    demo_trader_04: { portfolioId: "tech-heavy", risk: "Moderate", horizon: 2 },
-    demo_trader_05: { portfolioId: "all-weather-balanced", risk: "Moderate", horizon: 3 },
-    demo_trader_06: { portfolioId: "tech-heavy", risk: "Aggressive", horizon: 1 },
-    demo_trader_07: { portfolioId: "tech-heavy", risk: "Aggressive", horizon: 1 },
-    demo_trader_08: { portfolioId: "all-weather-balanced", risk: "Conservative", horizon: 5 },
-    demo_trader_09: { portfolioId: "tech-heavy", risk: "Moderate", horizon: 2 },
-    demo_trader_10: { portfolioId: "all-weather-balanced", risk: "Moderate", horizon: 4 },
-  };
 
   const handleUserChanged = (user: UserProfile, token: string) => {
     setCurrentUser(user);
@@ -2952,9 +3282,11 @@ export default function Dashboard() {
   const resetView = () => {
     try {
       window.localStorage.removeItem("aperture-risk-lab-state");
+      window.sessionStorage.removeItem("vertex-active-catalyst");
     } catch {
       // ignore
     }
+    setActiveNewsCatalyst(null);
     setCustomHoldings(null);
     setRebalanceAdopted(false);
     setWeights(basePortfolio.holdings.map((holding) => holding.weight));
@@ -2982,25 +3314,47 @@ export default function Dashboard() {
     }));
   };
 
+  const handleCatalystSelect = (
+    article?: NewsArticle,
+    headline?: string,
+    _scenarioId?: string,
+  ) => {
+    const chosenArticle =
+      article ||
+      DEFAULT_NEWS_ARTICLES.find((a) => a.headline === headline) ||
+      DEFAULT_NEWS_ARTICLES[0];
+
+    setActiveNewsCatalyst(chosenArticle);
+    const dynamicScenario = buildCatalystScenario(chosenArticle);
+    setActiveScenario(dynamicScenario);
+    navigateTo("stresslab");
+    setTimeout(() => {
+      const station = document.getElementById("catalyst-stress-station");
+      if (station) {
+        station.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        const scenariosEl = document.getElementById("scenarios");
+        scenariosEl?.scrollIntoView({ behavior: "smooth" });
+      }
+    }, 120);
+  };
+
   const handleRunFullAnalysis = () => {
-    if (activePage !== "stresslab" && activePage !== "overview") {
-      navigateTo("stresslab");
-      setTimeout(() => {
-        const panel = document.getElementById("risk-summary-engine");
-        if (panel) {
-          panel.scrollIntoView({ behavior: "smooth" });
-          const runBtn = panel.querySelector<HTMLButtonElement>(".api-run-button");
-          runBtn?.click();
-        }
-      }, 150);
+    const triggerEngine = () => {
+      const panel = document.getElementById("risk-diagnostics-panel") || document.getElementById("risk-summary-engine");
+      if (panel) {
+        panel.scrollIntoView({ behavior: "smooth" });
+        const runBtn = panel.querySelector<HTMLButtonElement>(".quant-run-btn") || panel.querySelector<HTMLButtonElement>(".api-run-button");
+        runBtn?.click();
+      }
+    };
+
+    if (activePage !== "overview" && activePage !== "stresslab") {
+      navigateTo("overview");
+      setTimeout(triggerEngine, 150);
       return;
     }
-    const panel = document.getElementById("risk-summary-engine");
-    if (panel) {
-      panel.scrollIntoView({ behavior: "smooth" });
-      const runBtn = panel.querySelector<HTMLButtonElement>(".api-run-button");
-      runBtn?.click();
-    }
+    triggerEngine();
   };
 
   const handleApplyRebalance = (proposedAssets: Array<{ ticker: string; sector?: string; weight_pct: number; amount_inr?: number }>) => {
@@ -3110,7 +3464,8 @@ export default function Dashboard() {
         )}
         <div className={`page-content page-${activePage}`} key={activePage}>
           {activePage === "overview" && (
-            <div className="analysis-grid overview-grid">
+            <>
+              <div className="analysis-grid overview-grid">
               <PerformancePanel
                 portfolio={portfolio}
                 portfolioId={portfolioId}
@@ -3126,84 +3481,83 @@ export default function Dashboard() {
                 hedgePreference={hedgePreference}
                 onNavigateToStressLab={handleRunFullAnalysis}
               />
-              <div className="overview-right-column">
-                <DiagnosticsPanel
-                  key={`${portfolioId}-${diagnosticsFormVersion}`}
-                  portfolio={portfolio}
-                  weights={weights}
-                  riskTolerance={riskTolerance}
-                  onRiskToleranceChange={setRiskTolerance}
-                  horizon={horizon}
-                  onHorizonChange={setHorizon}
-                  liquidityNeed={liquidityNeed}
-                  onLiquidityNeedChange={setLiquidityNeed}
-                  lossLimit={lossLimit}
-                  onLossLimitChange={setLossLimit}
-                  maxTurnoverPct={maxTurnoverPct}
-                  onMaxTurnoverPctChange={setMaxTurnoverPct}
-                  hedgePreference={hedgePreference}
-                  onHedgePreferenceChange={setHedgePreference}
-                  scenarioResult={scenarioResult}
-                  currency={currency}
-                />
-                <div className="overview-allocation-teaser">
-                  <div>
-                    <span className="eyebrow">Portfolio composition</span>
-                    <strong>Review the holdings and concentration behind this risk profile.</strong>
-                  </div>
-                  <a
-                    href="?page=allocation"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      navigateTo("allocation");
-                    }}
-                  >
-                    Explore allocation <span>→</span>
-                  </a>
-                </div>
-                {activeScenario && scenarioResult && (
-                  <div className="overview-compare-teaser">
-                    <span><strong>{activeScenario.label}</strong> models an impact of {signedMoney(scenarioResult.pnl, currency)}.</span>
-                    <a
-                      href="?page=stresslab"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        navigateTo("stresslab");
-                      }}
-                    >
-                      Open Stress Lab <span>→</span>
-                    </a>
-                  </div>
-                )}
-                <div className="page-endcap overview-endcap">
-                  <div className="endcap-copy">
-                    <span className="eyebrow">{pageMeta.title} · LEARNING NOTE</span>
-                    <strong>{pageGuidance[activePage].title}</strong>
-                  </div>
-                  <ul className="endcap-tips">
-                    {pageGuidance[activePage].tips.map((tip, index) => (
-                      <li key={tip}><span>0{index + 1}</span>{tip}</li>
-                    ))}
-                  </ul>
-                  <div className="endcap-orbit" aria-hidden="true">
-                    <svg viewBox="0 0 132 58" focusable="false">
-                      <path d="M4 42c18-1 20-28 40-28s20 30 40 30 22-23 44-23" />
-                      <circle cx="44" cy="14" r="4" />
-                      <circle cx="84" cy="44" r="4" />
-                      <circle cx="128" cy="21" r="4" />
-                    </svg>
-                    <span>RISK / IN CONTEXT</span>
-                  </div>
-                </div>
-              </div>
-              <RiskSummaryEngine
-                payload={riskSummaryRequest}
+              <DiagnosticsPanel
+                key={`${portfolioId}-${diagnosticsFormVersion}`}
+                portfolio={portfolio}
+                weights={weights}
+                riskTolerance={riskTolerance}
+                onRiskToleranceChange={setRiskTolerance}
+                horizon={horizon}
+                onHorizonChange={setHorizon}
+                liquidityNeed={liquidityNeed}
+                onLiquidityNeedChange={setLiquidityNeed}
+                lossLimit={lossLimit}
+                onLossLimitChange={setLossLimit}
+                maxTurnoverPct={maxTurnoverPct}
+                onMaxTurnoverPctChange={setMaxTurnoverPct}
+                hedgePreference={hedgePreference}
+                onHedgePreferenceChange={setHedgePreference}
+                scenarioResult={scenarioResult}
+                hedgedScenarioResult={hedgedScenarioResult}
                 currency={currency}
+                riskSummaryPayload={riskSummaryRequest}
                 onApplyRebalance={handleApplyRebalance}
                 rebalanceAdopted={rebalanceAdopted}
               />
             </div>
-          )}
+            <div className="overview-footer-flow">
+              <div className="overview-allocation-teaser">
+                <div>
+                  <span className="eyebrow">Portfolio composition</span>
+                  <strong>Review the holdings and concentration behind this risk profile.</strong>
+                </div>
+                <a
+                  href="?page=allocation"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigateTo("allocation");
+                  }}
+                >
+                  Explore allocation <span>→</span>
+                </a>
+              </div>
+              {activeScenario && scenarioResult && (
+                <div className="overview-compare-teaser">
+                  <span><strong>{activeScenario.label}</strong> models an impact of {signedMoney(scenarioResult.pnl, currency)}.</span>
+                  <a
+                    href="?page=stresslab"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      navigateTo("stresslab");
+                    }}
+                  >
+                    Open Stress Lab <span>→</span>
+                  </a>
+                </div>
+              )}
+              <div className="page-endcap overview-endcap">
+                <div className="endcap-copy">
+                  <span className="eyebrow">{pageMeta.title} · LEARNING NOTE</span>
+                  <strong>{pageGuidance[activePage].title}</strong>
+                </div>
+                <ul className="endcap-tips">
+                  {pageGuidance[activePage].tips.map((tip, index) => (
+                    <li key={tip}><span>0{index + 1}</span>{tip}</li>
+                  ))}
+                </ul>
+                <div className="endcap-orbit" aria-hidden="true">
+                  <svg viewBox="0 0 132 58" focusable="false">
+                    <path d="M4 42c18-1 20-28 40-28s20 30 40 30 22-23 44-23" />
+                    <circle cx="44" cy="14" r="4" />
+                    <circle cx="84" cy="44" r="4" />
+                    <circle cx="128" cy="21" r="4" />
+                  </svg>
+                  <span>RISK / IN CONTEXT</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
           {activePage === "allocation" && (
             <div className="page-grid allocation-page-grid">
               <AllocationPanel
@@ -3238,6 +3592,29 @@ export default function Dashboard() {
           )}
           {activePage === "stresslab" && (
             <div className="page-grid stress-page-grid">
+              {activeNewsCatalyst && (
+                <CatalystStressStation
+                  catalyst={activeNewsCatalyst}
+                  portfolio={portfolio}
+                  allPortfolios={portfolios}
+                  weights={weights}
+                  currency={currency}
+                  activeScenario={activeScenario}
+                  onSwitchPortfolio={(newId) => changePortfolio(newId)}
+                  onAdoptStrategy={(newWeights) => {
+                    setWeights(newWeights);
+                    setAlternativeWeights(newWeights);
+                    setRebalanceAdopted(true);
+                  }}
+                  onClearCatalyst={() => {
+                    setActiveNewsCatalyst(null);
+                    setActiveScenario(scenarios[0]);
+                  }}
+                  onSelectOtherCatalyst={(otherArticle) => {
+                    handleCatalystSelect(otherArticle, otherArticle.headline, otherArticle.suggestedScenarioId);
+                  }}
+                />
+              )}
               <ScenarioPanel
                 activeScenario={activeScenario}
                 scenarioResult={scenarioResult}
@@ -3335,14 +3712,8 @@ export default function Dashboard() {
             <NewsIntelligenceWidget
               portfolio={portfolio}
               currency={currency}
-              onNavigateToStressLab={(_headline, _ticker, scenarioId) => {
-                const targetScenario = scenarios.find((s) => s.id === scenarioId) ?? scenarios[0];
-                setActiveScenario(targetScenario);
-                navigateTo("stresslab");
-                setTimeout(() => {
-                  const el = document.getElementById("scenarios");
-                  el?.scrollIntoView({ behavior: "smooth" });
-                }, 100);
+              onNavigateToStressLab={(headline, _affectedTicker, scenarioId, article) => {
+                handleCatalystSelect(article, headline, scenarioId);
               }}
             />
           )}

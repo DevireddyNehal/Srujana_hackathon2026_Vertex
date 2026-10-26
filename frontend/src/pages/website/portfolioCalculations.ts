@@ -166,12 +166,26 @@ export function calculateHedgedScenario(
   };
 }
 
-function dailyPortfolioReturns(holdings: NormalizedHolding[]): number[] {
+function dailyPortfolioReturns(holdings: NormalizedHolding[], monthlyReturns?: number[]): number[] {
+  const monthlyMean = monthlyReturns && monthlyReturns.length > 0
+    ? monthlyReturns.reduce((sum, r) => sum + r, 0) / monthlyReturns.length
+    : 0.01;
+  const dailyMean = monthlyMean / 21;
+  const monthlyVariance = monthlyReturns && monthlyReturns.length > 1
+    ? monthlyReturns.reduce((sum, r) => sum + (r - monthlyMean) ** 2, 0) / (monthlyReturns.length - 1)
+    : 0.0001;
+  const volFactor = Math.max(0.35, Math.min(2.8, Math.sqrt(monthlyVariance) / 0.008));
+
   return Array.from({ length: 252 }, (_, day) => {
+    const monthIdx = Math.min(Math.floor(day / 21), (monthlyReturns?.length || 12) - 1);
+    const monthDrift = (monthlyReturns && monthlyReturns[monthIdx] !== undefined)
+      ? (monthlyReturns[monthIdx] / 21)
+      : dailyMean;
+
     const market =
-      0.00018 +
-      0.009 * Math.sin((day + 2) * 0.43) +
-      0.006 * Math.cos((day + 7) * 0.19);
+      monthDrift +
+      volFactor * (0.00018 + 0.009 * Math.sin((day + 2) * 0.43) + 0.006 * Math.cos((day + 7) * 0.19));
+
     const returnForDay = holdings.reduce((sum, holding) => {
       const equityExposure =
         holding.assetClass === "Equity"
@@ -186,7 +200,7 @@ function dailyPortfolioReturns(holdings: NormalizedHolding[]): number[] {
       const cyclical = Math.sin((day + 3) * (0.17 + holding.weight / 300));
       const dailyReturn =
         market * equityExposure +
-        (holding.volatility / 100 / Math.sqrt(252)) *
+        volFactor * (holding.volatility / 100 / Math.sqrt(252)) *
           cyclical *
           (holding.assetClass === "Equity" ? 0.38 : 0.16);
       return sum + (holding.normalizedWeight / 100) * dailyReturn;
@@ -236,7 +250,23 @@ export function calculateMetrics(
   months: 12 | 24,
 ) {
   const { holdings } = normalizeHoldings(portfolio, weights);
-  const dailyReturns = dailyPortfolioReturns(holdings);
+  const baseMonthlyReturns = (portfolio.historicalMonthlyReturns && portfolio.historicalMonthlyReturns.length >= months)
+    ? portfolio.historicalMonthlyReturns.slice(-months)
+    : historicMonthlyReturns(holdings).slice(-months);
+
+  // If user adjusted weights, calculate delta adjustment from holdings
+  const baseHoldingsWeightedReturn = portfolio.holdings.reduce(
+    (sum, h) => sum + (h.weight / 100) * (h.historicalReturn / 100 / 12),
+    0
+  );
+  const currentHoldingsWeightedReturn = holdings.reduce(
+    (sum, h) => sum + (h.normalizedWeight / 100) * (h.historicalReturn / 100 / 12),
+    0
+  );
+  const delta = currentHoldingsWeightedReturn - baseHoldingsWeightedReturn;
+  const monthlyReturns = baseMonthlyReturns.map((r) => r + delta);
+
+  const dailyReturns = dailyPortfolioReturns(holdings, monthlyReturns);
   const selectedReturns = dailyReturns.slice(-months * 21);
   const average = selectedReturns.reduce((sum, value) => sum + value, 0) /
     Math.max(selectedReturns.length, 1);
@@ -246,13 +276,20 @@ export function calculateMetrics(
   const sortedReturns = [...selectedReturns].sort((a, b) => a - b);
   const fifthPercentile =
     sortedReturns[Math.floor((sortedReturns.length - 1) * 0.05)] ?? 0;
-  const monthlyReturns = historicMonthlyReturns(holdings).slice(-months);
+
+  // Reconstruct historical path:
+  // Starts 12 or 24 months ago and compounds so that the final point is portfolio.marketValue:
+  const cumulativeGrowth = monthlyReturns.reduce((acc, r) => acc * (1 + r), 1);
+  const startingValue = (cumulativeGrowth > 0.05 && Number.isFinite(cumulativeGrowth))
+    ? portfolio.marketValue / cumulativeGrowth
+    : portfolio.marketValue;
+
   const historicalValues = monthlyReturns.reduce<number[]>(
     (values, monthlyReturn) => {
-      values.push((values.at(-1) ?? portfolio.marketValue) * (1 + monthlyReturn));
+      values.push((values.at(-1) ?? startingValue) * (1 + monthlyReturn));
       return values;
     },
-    [portfolio.marketValue],
+    [startingValue],
   );
   const annualizedVolatility = Math.sqrt(variance * 252) * 100;
   const weightedReturn = holdings.reduce(
