@@ -1174,7 +1174,7 @@ function RecoveryAnalysisCard({
   turnoverBudgetPct?: number;
   onNavigateToStressLab?: () => void;
 }) {
-  const { unhedged, hedged, capitalPreservedInr, yearsSaved, probBoostPct, isDrawdown } = recovery;
+  const { unhedged, hedged, capitalPreservedInr, yearsSaved, isDrawdown } = recovery;
 
   // Generate actionable trim and hedge trade allocation implicitly from the portfolio math
   const holdings = portfolio ? normalizeHoldings(portfolio, weights || []).holdings : [];
@@ -1259,12 +1259,12 @@ function RecoveryAnalysisCard({
         </div>
 
         <div style={{ background: "var(--canvas, rgba(0,0,0,0.02))", border: "1px solid var(--line)", borderRadius: "8px", padding: "10px 12px" }}>
-          <div style={{ fontSize: "10px", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>Path Resilience Index (3-Yr)</div>
+          <div style={{ fontSize: "10px", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 }}>Drawdown Cushion</div>
           <div style={{ fontSize: "18px", fontWeight: 700, color: "#2EAF7D", marginTop: "2px" }}>
-            {formatPercent(hedged.probRecoveringWithinHorizonPct)}
+            +{Math.max(0, Number((unhedged.lossPct - hedged.lossPct).toFixed(1)))}%
           </div>
           <div style={{ fontSize: "10px", color: "var(--muted)", marginTop: "2px" }}>
-            {probBoostPct > 0 ? `+${probBoostPct}% modeled resilience gain` : "Statistical path resilience"}
+            Hedged −{hedged.lossPct}% vs unhedged −{unhedged.lossPct}%
           </div>
         </div>
 
