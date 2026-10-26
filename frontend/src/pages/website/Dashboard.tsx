@@ -1649,6 +1649,21 @@ function DiagnosticsPanel({
     onHedgePreferenceChange?.(draftHedgePreference);
   };
 
+  const liquidAssets = holdings
+    .filter((h) => h.liquidity === "High" || h.assetClass === "Cash")
+    .reduce((sum, h) => sum + h.marketValue, 0);
+  const liquidCoverageRatio = draftLiquidityNeed > 0 ? (liquidAssets / draftLiquidityNeed) * 100 : 100;
+
+  const sectorWeights: Record<string, number> = {};
+  for (const h of holdings) {
+    sectorWeights[h.sector] = (sectorWeights[h.sector] || 0) + h.normalizedWeight;
+  }
+  const topSector = Object.entries(sectorWeights).sort((a, b) => b[1] - a[1])[0] ?? ["Diversified", 0];
+
+  const equityWeight = holdings
+    .filter((h) => h.assetClass === "Equity")
+    .reduce((sum, h) => sum + h.normalizedWeight, 0);
+
   return (
     <section className="panel diagnostics-panel">
       <div className="panel-heading">
@@ -1715,6 +1730,32 @@ function DiagnosticsPanel({
           <button className="apply-settings" type="submit" disabled={!hasUnappliedChanges}>Apply settings</button>
         </div>
       </form>
+      <div className="governance-scorecard">
+        <div className="scorecard-metric">
+          <span className="scorecard-label">Liquidity Coverage</span>
+          <strong className={liquidCoverageRatio >= 100 ? "metric-pass" : "metric-alert"}>
+            {liquidCoverageRatio >= 100 ? "✓ " : "⚠ "}{liquidCoverageRatio.toFixed(0)}%
+          </strong>
+          <small>{money(liquidAssets, currency, true)} liquid vs {money(draftLiquidityNeed, currency, true)} target</small>
+        </div>
+        <div className="scorecard-metric">
+          <span className="scorecard-label">Top Sector Weight</span>
+          <strong className={topSector[1] > 30 ? "metric-alert" : "metric-pass"}>
+            {topSector[1] > 30 ? "⚠ " : "✓ "}{topSector[1].toFixed(1)}% {topSector[0]}
+          </strong>
+          <small>{topSector[1] > 30 ? "Above 30% prudential limit" : "Within concentration limit"}</small>
+        </div>
+        <div className="scorecard-metric">
+          <span className="scorecard-label">Equity Growth Tilt</span>
+          <strong className="metric-info">{equityWeight.toFixed(1)}% Equity</strong>
+          <small>{draftHorizon <= 2 && equityWeight > 50 ? "High equity for short horizon" : `${draftHorizon}y horizon alignment`}</small>
+        </div>
+        <div className="scorecard-metric">
+          <span className="scorecard-label">Downside Tolerance</span>
+          <strong className="metric-info">{draftLossLimit}% max loss</strong>
+          <small>{draftRiskTolerance} risk profile guideline</small>
+        </div>
+      </div>
       <div className="diagnostics-list" aria-live="polite">
         {warnings.length ? warnings.map((warning, index) => (
           <article className={`diagnostic-item ${warning.severity}`} key={`${warning.title}-${index}`}>
@@ -2935,24 +2976,6 @@ export default function Dashboard() {
                 maxTurnoverPct={maxTurnoverPct}
                 hedgePreference={hedgePreference}
                 onNavigateToStressLab={handleRunFullAnalysis}
-              />
-              <ScenarioPanel
-                activeScenario={activeScenario}
-                scenarioResult={scenarioResult}
-                hedgedScenarioResult={hedgedScenarioResult}
-                onSelect={setActiveScenario}
-                onCustomChange={customScenarioChange}
-                portfolio={portfolio}
-                currency={currency}
-                lossLimit={lossLimit}
-                onLossLimitChange={setLossLimit}
-                maxTurnoverPct={maxTurnoverPct}
-                onMaxTurnoverPctChange={setMaxTurnoverPct}
-                minLiquidityPct={minLiquidityPct}
-                onMinLiquidityPctChange={setMinLiquidityPct}
-                hedgePreference={hedgePreference}
-                onHedgePreferenceChange={setHedgePreference}
-                onSubmitRebalance={handleRunFullAnalysis}
               />
               <DiagnosticsPanel
                 key={`${portfolioId}-${diagnosticsFormVersion}`}
